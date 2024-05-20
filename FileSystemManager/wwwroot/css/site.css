@@ -1,0 +1,54 @@
+﻿body {
+    background-color: #f8f9fa;
+    color: #343a40;
+}
+
+.navbar {
+    margin-bottom: 20px;
+}
+
+.navbar-brand {
+    color: #28a745 !important;
+}
+
+.nav-link {
+    color: #28a745 !important;
+}
+
+h1, h2 {
+    color: #28a745;
+}
+
+.btn-primary {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+    .btn-primary:hover {
+        background-color: #218838;
+        border-color: #1e7e34;
+    }
+
+.form-group label {
+    color: #28a745;
+}
+
+a {
+    color: #28a745;
+}
+
+    a:hover {
+        color: #218838;
+    }
+
+ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+    ul li {
+        margin: 5px 0;
+        padding: 10px;
+        background-color: #e9ecef;
+        border-radius: 5px;
+    }
