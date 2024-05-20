@@ -5,7 +5,7 @@
 
 <h1>Upload File</h1>
 
-<form asp-action="UploadFile" method="post" enctype="multipart/form-data">
+<form id="uploadForm" asp-action="UploadFile" method="post" enctype="multipart/form-data">
     <div class="form-group">
         <label for="file">File</label>
         <input type="file" class="form-control-file" id="file" name="file" required />
@@ -13,3 +13,84 @@
     </div>
     <button type="submit" class="btn btn-primary">Upload</button>
 </form>
+
+<!-- Conflict Modal -->
+<div class="modal fade" id="conflictModal" tabindex="-1" role="dialog" aria-labelledby="conflictModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="conflictModalLabel">Conflict</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="conflictMessage"></p>
+                <div class="form-group">
+                    <label for="suggestedName">Suggested Name</label>
+                    <input type="text" class="form-control" id="suggestedName" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="replaceButton">Replace</button>
+                <button type="button" class="btn btn-primary" id="renameButton">Rename</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            var formData = new FormData(this);
+
+            fetch('@Url.Action("UploadFile", "FileSystem")', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                if (response.status === 409) {
+                    return response.json().then(data => {
+                        document.getElementById('conflictMessage').textContent = 'A file with this name already exists. Do you want to replace it or rename the new file?';
+                        document.getElementById('suggestedName').value = data.suggestedName;
+                        $('#conflictModal').modal('show');
+                    });
+                } else if (response.ok) {
+                    window.location.href = '@Url.Action("Index", "FileSystem")?path=@currentPath';
+                } else {
+                    alert('Error uploading file');
+                }
+            });
+        });
+
+        document.getElementById('replaceButton').addEventListener('click', function() {
+            var formData = new FormData(document.getElementById('uploadForm'));
+
+            fetch('@Url.Action("ReplaceFile", "FileSystem")', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                if (response.ok) {
+                    window.location.href = '@Url.Action("Index", "FileSystem")?path=@currentPath';
+                } else {
+                    alert('Error replacing file');
+                }
+            });
+        });
+
+        document.getElementById('renameButton').addEventListener('click', function() {
+            var formData = new FormData(document.getElementById('uploadForm'));
+            formData.set('file', new File([formData.get('file')], document.getElementById('suggestedName').value, { type: formData.get('file').type }));
+
+            fetch('@Url.Action("UploadFile", "FileSystem")', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                if (response.ok) {
+                    window.location.href = '@Url.Action("Index", "FileSystem")?path=@currentPath';
+                } else {
+                    alert('Error renaming and uploading file');
+                }
+            });
+        });
+    </script>
+}

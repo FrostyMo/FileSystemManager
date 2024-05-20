@@ -43,11 +43,12 @@ namespace FileSystemManager.Controllers
             var currentPath = Path.Combine(rootPath, sanitizedPath);
             var newPath = Path.Combine(currentPath, directoryName);
 
-            if (!Directory.Exists(newPath))
+            if (Directory.Exists(newPath))
             {
-                Directory.CreateDirectory(newPath);
+                return Conflict(new { suggestedName = GetUniqueDirectoryName(newPath) });
             }
 
+            Directory.CreateDirectory(newPath);
             return RedirectToAction("Index", new { path });
         }
 
@@ -67,6 +68,11 @@ namespace FileSystemManager.Controllers
                 var currentPath = Path.Combine(rootPath, sanitizedPath);
                 var filePath = Path.Combine(currentPath, file.FileName);
 
+                if (System.IO.File.Exists(filePath))
+                {
+                    return Conflict(new { suggestedName = GetUniqueFileName(filePath) });
+                }
+
                 using (var stream = new FileStream(filePath, FileMode.Create))
                 {
                     file.CopyTo(stream);
@@ -77,6 +83,55 @@ namespace FileSystemManager.Controllers
             }
 
             return RedirectToAction("Index", new { path });
+        }
+
+        [HttpPost]
+        public IActionResult ReplaceFile(IFormFile file, string path)
+        {
+            if (file != null && file.Length > 0)
+            {
+                var sanitizedPath = string.IsNullOrEmpty(path) ? "" : path.TrimStart('/');
+                var currentPath = Path.Combine(rootPath, sanitizedPath);
+                var filePath = Path.Combine(currentPath, file.FileName);
+
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    file.CopyTo(stream);
+                }
+
+                // Debug logging
+                Console.WriteLine($"Uploaded file: {filePath}");
+            }
+
+            return RedirectToAction("Index", new { path });
+        }
+
+        private string GetUniqueDirectoryName(string path)
+        {
+            int count = 1;
+            string uniquePath = path;
+            while (Directory.Exists(uniquePath))
+            {
+                uniquePath = $"{path}({count})";
+                count++;
+            }
+            return new DirectoryInfo(uniquePath).Name;
+        }
+
+        private string GetUniqueFileName(string path)
+        {
+            int count = 1;
+            string uniquePath = path;
+            string directory = Path.GetDirectoryName(path);
+            string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(path);
+            string extension = Path.GetExtension(path);
+
+            while (System.IO.File.Exists(uniquePath))
+            {
+                uniquePath = Path.Combine(directory, $"{fileNameWithoutExtension}({count}){extension}");
+                count++;
+            }
+            return Path.GetFileName(uniquePath);
         }
 
         public IActionResult OpenFile(string path)
@@ -197,6 +252,76 @@ namespace FileSystemManager.Controllers
             {
                 return StatusCode(500, "Error renaming item");
             }
+        }
+
+        [HttpGet]
+        public IActionResult GetItemInfo(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return BadRequest("Invalid path");
+            }
+
+            var decodedPath = System.Net.WebUtility.UrlDecode(path);
+            var fullPath = Path.Combine(rootPath, decodedPath.TrimStart('/'));
+            var relativePath = Path.GetRelativePath(rootPath, fullPath).Replace("\\", "/");
+
+            try
+            {
+                var info = new
+                {
+                    createDate = System.IO.File.GetCreationTime(fullPath).ToString("G"),
+                    createdBy = "Unknown", // Placeholder, should be replaced with actual data
+                    modifiedDate = System.IO.File.GetLastWriteTime(fullPath).ToString("G"),
+                    modifiedBy = "Unknown", // Placeholder, should be replaced with actual data
+                    size = GetDirectorySize(fullPath),
+                    location = relativePath
+                };
+
+                return Json(info);
+            }
+            catch
+            {
+                return StatusCode(500, "Error retrieving item info");
+            }
+        }
+
+        private string GetDirectorySize(string path)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    var dirInfo = new DirectoryInfo(path);
+                    long size = dirInfo.GetFiles("*", SearchOption.AllDirectories).Sum(file => file.Length);
+                    return FormatSize(size);
+                }
+                else if (System.IO.File.Exists(path))
+                {
+                    var fileInfo = new FileInfo(path);
+                    return FormatSize(fileInfo.Length);
+                }
+                else
+                {
+                    return "Not Found";
+                }
+            }
+            catch
+            {
+                return "Error";
+            }
+        }
+
+        private string FormatSize(long bytes)
+        {
+            if (bytes >= 1073741824)
+                return (bytes / 1073741824.0).ToString("0.00") + " GB";
+            else if (bytes >= 1048576)
+                return (bytes / 1048576.0).ToString("0.00") + " MB";
+            else if (bytes >= 1024)
+                return (bytes / 1024.0).ToString("0.00") + " KB";
+            else
+                return bytes + " B";
         }
     }
 }

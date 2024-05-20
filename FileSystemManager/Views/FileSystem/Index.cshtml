@@ -56,12 +56,34 @@
         <li id="open">Open</li>
         <li id="rename">Rename</li>
         <li id="delete">Delete</li>
+        <li id="info">Info</li>
     </ul>
+</div>
+
+<!-- Info Modal -->
+<div class="modal fade" tabindex="-1" role="dialog" id="info-modal">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Item Info</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="item-info">
+          <p><strong>Create Date:</strong> <span id="create-date"></span></p>
+          <p><strong>Created By:</strong> <span id="created-by"></span></p>
+          <p><strong>Modified Date:</strong> <span id="modified-date"></span></p>
+          <p><strong>Modified By:</strong> <span id="modified-by"></span></p>
+          <p><strong>Size:</strong> <span id="size"></span></p>
+          <p><strong>Location:</strong> <span id="location"></span></p>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 @section Scripts {
     <script>
-        
         document.addEventListener('DOMContentLoaded', function() {
             const contextMenu = document.getElementById('context-menu');
             let selectedElement = null;
@@ -69,13 +91,21 @@
             document.addEventListener('click', function(event) {
                 if (!event.target.closest('.list-group-item') && !event.target.closest('#context-menu')) {
                     contextMenu.style.display = 'none';
+                    if (selectedElement) {
+                        selectedElement.classList.remove('highlight-clicked');
+                        selectedElement = null;
+                    }
                 }
             });
 
             document.addEventListener('contextmenu', function(event) {
                 if (event.target.closest('.list-group-item')) {
                     event.preventDefault();
+                    if (selectedElement) {
+                        selectedElement.classList.remove('highlight-clicked');
+                    }
                     selectedElement = event.target.closest('.list-group-item');
+                    selectedElement.classList.add('highlight-clicked');
                     const { clientX: mouseX, clientY: mouseY } = event;
 
                     contextMenu.style.top = `${mouseY}px`;
@@ -87,7 +117,13 @@
             });
 
             document.querySelectorAll('.list-group-item').forEach(item => {
-                item.addEventListener('click', function() {
+                item.addEventListener('mouseenter', function() {
+                    this.classList.add('highlight');
+                });
+                item.addEventListener('mouseleave', function() {
+                    this.classList.remove('highlight');
+                });
+                item.addEventListener('dblclick', function() {
                     const path = this.getAttribute('data-path');
                     const type = this.getAttribute('data-type');
                     if (type === 'directory') {
@@ -117,6 +153,7 @@
                     }).then(response => {
                         if (response.ok) {
                             selectedElement.remove();
+                            contextMenu.style.display = 'none';
                         } else {
                             alert('Error deleting item');
                         }
@@ -136,40 +173,69 @@
                             const newPath = path.substring(0, path.lastIndexOf('/')) + '/' + newName;
                             selectedElement.setAttribute('data-path', newPath);
                             selectedElement.querySelector(type === 'directory' ? '.directory-name' : '.file-name').textContent = newName;
-                            contextMenu.style.display = 'none';
+                            contextMenu.style.display = 'none';  // Close the context menu
                         } else {
                             alert('Error renaming item');
                         }
                     });
                 }
             });
+
+            document.getElementById('info').addEventListener('click', function() {
+                const path = selectedElement.getAttribute('data-path');
+                fetch(`@Url.Action("GetItemInfo", "FileSystem")?path=${path}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('create-date').textContent = data.createDate;
+                        document.getElementById('created-by').textContent = data.createdBy;
+                        document.getElementById('modified-date').textContent = data.modifiedDate;
+                        document.getElementById('modified-by').textContent = data.modifiedBy;
+                        document.getElementById('size').textContent = data.size;
+                        document.getElementById('location').textContent = data.location;
+                        $('#info-modal').modal('show');
+                        contextMenu.style.display = 'none';  // Close the context menu
+                    });
+            });
         });
     </script>
     <style>
-    .context-menu {
-        display: none;
-        position: absolute;
-        background-color: white;
-        border: 1px solid #ccc;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-        z-index: 1000;
-        width: 150px; /* Increase the width */
-    }
-
-    .context-menu ul {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-    }
-
-    .context-menu ul li {
-        padding: 8px 12px;
-        cursor: pointer;
-        background-color: white; /* Ensure a single color */
-    }
-
-    .context-menu ul li:hover {
-        background-color: #eee; /* Light grey for hover effect */
-    }
+        .context-menu {
+            display: none;
+            position: absolute;
+            background-color: white;
+            border: 1px solid #ccc;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            width: 150px;  /* Increase the width */
+        }
+        .context-menu ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+        .context-menu ul li {
+            padding: 8px 12px;
+            cursor: pointer;
+            background-color: white;  /* Ensure a single color */
+        }
+        .context-menu ul li:hover {
+            background-color: #eee;  /* Light grey for hover effect */
+        }
+        .list-group-item.highlight {
+            background-color: #f0f0f0;
+        }
+        .list-group-item.highlight-clicked {
+            background-color: #d4edda;
+        }
+        .modal-body p {
+            word-wrap: break-word;
+        }
+        .modal-body .item-info {
+            font-size: 1rem;
+        }
+        .modal-body .item-info span {
+            display: block;
+            margin-bottom: 0.5rem;
+        }
     </style>
 }

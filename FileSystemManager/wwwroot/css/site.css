@@ -29,6 +29,31 @@ h1, h2 {
         border-color: #1e7e34;
     }
 
+.btn {
+    background-color: #28a745; /* Change to your desired color */
+    border-color: #28a745; /* Change to your desired color */
+    color: white;
+}
+
+    .btn:hover,
+    .btn:focus {
+        background-color: #218838; /* Darken on hover/focus */
+        border-color: #1e7e34;
+    }
+
+.btn-secondary {
+    background-color: #6c757d; /* Change to your desired color */
+    border-color: #6c757d; /* Change to your desired color */
+    color: white;
+}
+
+    .btn-secondary:hover,
+    .btn-secondary:focus {
+        background-color: #5a6268; /* Darken on hover/focus */
+        border-color: #545b62;
+    }
+
+
 .form-group label {
     color: #28a745;
 }
@@ -52,6 +77,18 @@ ul {
         background-color: #e9ecef;
         border-radius: 5px;
     }
+
+.modal-body p {
+    word-wrap: break-word;
+}
+
+.modal-body .form-group {
+    margin-bottom: 1rem;
+}
+
+.modal-footer .btn {
+    margin-left: 0.5rem;
+}
 
 .context-menu {
     display: none;

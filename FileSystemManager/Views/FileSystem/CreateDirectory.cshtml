@@ -5,7 +5,7 @@
 
 <h1>Create Directory</h1>
 
-<form asp-action="CreateDirectory" method="post">
+<form id="createDirectoryForm" asp-action="CreateDirectory" method="post">
     <div class="form-group">
         <label for="directoryName">Directory Name</label>
         <input type="text" class="form-control" id="directoryName" name="directoryName" required />
@@ -13,3 +13,68 @@
     </div>
     <button type="submit" class="btn btn-primary">Create</button>
 </form>
+
+<!-- Conflict Modal -->
+<div class="modal fade" id="conflictModal" tabindex="-1" role="dialog" aria-labelledby="conflictModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="conflictModalLabel">Conflict</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="conflictMessage"></p>
+                <div class="form-group">
+                    <label for="suggestedName">Suggested Name</label>
+                    <input type="text" class="form-control" id="suggestedName" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="createWithNewNameButton">Create with New Name</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('createDirectoryForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            var formData = new FormData(this);
+
+            fetch('@Url.Action("CreateDirectory", "FileSystem")', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                if (response.status === 409) {
+                    return response.json().then(data => {
+                        document.getElementById('conflictMessage').textContent = 'A directory with this name already exists. Do you want to create it with a new name?';
+                        document.getElementById('suggestedName').value = data.suggestedName;
+                        $('#conflictModal').modal('show');
+                    });
+                } else if (response.ok) {
+                    window.location.href = '@Url.Action("Index", "FileSystem")?path=@currentPath';
+                } else {
+                    alert('Error creating directory');
+                }
+            });
+        });
+
+        document.getElementById('createWithNewNameButton').addEventListener('click', function() {
+            var formData = new FormData(document.getElementById('createDirectoryForm'));
+            formData.set('directoryName', document.getElementById('suggestedName').value);
+
+            fetch('@Url.Action("CreateDirectory", "FileSystem")', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                if (response.ok) {
+                    window.location.href = '@Url.Action("Index", "FileSystem")?path=@currentPath';
+                } else {
+                    alert('Error creating directory with new name');
+                }
+            });
+        });
+    </script>
+}
