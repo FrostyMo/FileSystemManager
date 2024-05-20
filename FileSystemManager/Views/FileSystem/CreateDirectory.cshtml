@@ -1,5 +1,6 @@
 ﻿@{
     ViewData["Title"] = "Create Directory";
+    var currentPath = ViewBag.CurrentPath?.ToString() ?? "";
 }
 
 <h1>Create Directory</h1>
@@ -8,6 +9,7 @@
     <div class="form-group">
         <label for="directoryName">Directory Name</label>
         <input type="text" class="form-control" id="directoryName" name="directoryName" required />
+        <input type="hidden" name="path" value="@currentPath" />
     </div>
     <button type="submit" class="btn btn-primary">Create</button>
 </form>
