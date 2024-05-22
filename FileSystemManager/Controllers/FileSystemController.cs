@@ -141,12 +141,8 @@ namespace FileSystemManager.Controllers
                 return NotFound();
             }
 
-            // Decode the URL-encoded path
             var decodedPath = System.Net.WebUtility.UrlDecode(path);
             var filePath = Path.Combine(rootPath, decodedPath.TrimStart('/'));
-
-            // Debug logging
-            Console.WriteLine($"Opening file: {filePath}");
 
             if (!System.IO.File.Exists(filePath))
             {
@@ -157,7 +153,6 @@ namespace FileSystemManager.Controllers
             var mimeType = "application/octet-stream";
             var fileExtension = Path.GetExtension(filePath).ToLowerInvariant();
 
-            // Determine MIME type based on file extension
             switch (fileExtension)
             {
                 case ".jpg":

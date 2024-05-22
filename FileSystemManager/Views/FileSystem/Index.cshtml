@@ -78,6 +78,24 @@
           <p><strong>Location:</strong> <span id="location"></span></p>
         </div>
       </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- File Preview Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1" role="dialog" aria-labelledby="previewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="previewModalLabel">File Preview</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="filePreview"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -129,7 +147,28 @@
                     if (type === 'directory') {
                         window.location.href = `@Url.Action("Index", "FileSystem")?path=${path}`;
                     } else if (type === 'file') {
-                        window.location.href = `@Url.Action("OpenFile", "FileSystem")?path=${path}`;
+                        fetch(`@Url.Action("OpenFile", "FileSystem")?path=${path}`)
+                            .then(response => response.blob())
+                            .then(blob => {
+                                const url = URL.createObjectURL(blob);
+                                let previewElement;
+                                const extension = path.split('.').pop().toLowerCase();
+                                if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) {
+                                    previewElement = `<img src="${url}" class="img-fluid">`;
+                                } else if (extension === 'pdf') {
+                                    previewElement = `<embed src="${url}" width="100%" height="600px">`;
+                                } else if (['txt', 'html'].includes(extension)) {
+                                    return response.text().then(text => {
+                                        previewElement = `<pre>${text}</pre>`;
+                                        document.getElementById('filePreview').innerHTML = previewElement;
+                                        $('#previewModal').modal('show');
+                                    });
+                                } else {
+                                    previewElement = `<p>Preview not available for this file type.</p>`;
+                                }
+                                document.getElementById('filePreview').innerHTML = previewElement;
+                                $('#previewModal').modal('show');
+                            });
                     }
                 });
             });
