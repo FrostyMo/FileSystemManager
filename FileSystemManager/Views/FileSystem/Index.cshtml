@@ -2,9 +2,35 @@
     ViewData["Title"] = "File System";
     var currentPath = ViewBag.CurrentPath?.ToString() ?? "";
     var parentPath = ViewBag.ParentPath?.ToString() ?? "";
+    var breadcrumbs = ViewBag.Breadcrumbs as List<FileSystemManager.Controllers.FileSystemController.Breadcrumb>;
+    var currentPage = ViewBag.CurrentPage;
+    var totalPages = ViewBag.TotalPages;
 }
 
 <h1>File System</h1>
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="@Url.Action("Index", new { path = "" })">Home</a></li>
+        @if (breadcrumbs != null)
+        {
+            foreach (var breadcrumb in breadcrumbs)
+            {
+                var isActive = breadcrumb.Path == currentPath;
+                <li class="breadcrumb-item @(isActive ? "active" : "")" @(isActive ? "aria-current=\"page\"" : "")>
+                    @if (!isActive)
+                    {
+                        <a href="@Url.Action("Index", new { path = breadcrumb.Path })">@breadcrumb.Name</a>
+                    }
+                    else
+                    {
+                        @breadcrumb.Name
+                    }
+                </li>
+            }
+        }
+    </ol>
+</nav>
 
 @if (!string.IsNullOrEmpty(currentPath))
 {
@@ -49,6 +75,27 @@
         <a class="btn btn-primary mt-3" href="@Url.Action("UploadFile", new { path = currentPath })">Upload New File</a>
     </div>
 </div>
+
+<!-- Pagination Controls -->
+<nav aria-label="Page navigation example">
+    <ul class="pagination">
+        <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+            <a class="page-link" href="@Url.Action("Index", new { path = currentPath, page = currentPage - 1 })" aria-label="Previous">
+                <span aria-hidden="true">&laquo;</span>
+            </a>
+        </li>
+        @for (var i = 1; i <= totalPages; i++)
+        {
+            <li class="page-item @(currentPage == i ? "active" : "")"><a class="page-link" href="@Url.Action("Index", new { path = currentPath, page = i })">@i</a></li>
+        }
+        <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+            <a class="page-link" href="@Url.Action("Index", new { path = currentPath, page = currentPage + 1 })" aria-label="Next">
+                <span aria-hidden="true">&raquo;</span>
+            </a>
+        </li>
+    </ul>
+</nav>
+
 
 <!-- Context Menu -->
 <div id="context-menu" class="context-menu">

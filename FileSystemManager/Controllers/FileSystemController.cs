@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.IO;
 using System.Linq;
 
@@ -6,9 +7,17 @@ namespace FileSystemManager.Controllers
 {
     public class FileSystemController : Controller
     {
-        private readonly string rootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+        private readonly string rootPath;
+        private readonly IConfiguration configuration;
+        public FileSystemController(IConfiguration configuration)
+        {
+            this.configuration = configuration;
+            rootPath = configuration["PhotoDirectory"] ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+        }
+        
+        //private readonly string rootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
 
-        public IActionResult Index(string path = "")
+        public IActionResult Index(string path = "", int page = 1, int pageSize = 10)
         {
             var sanitizedPath = string.IsNullOrEmpty(path) ? "" : path.TrimStart('/');
             var currentPath = Path.Combine(rootPath, sanitizedPath);
@@ -20,11 +29,19 @@ namespace FileSystemManager.Controllers
 
             var directories = Directory.GetDirectories(currentPath).Select(d => new DirectoryInfo(d)).ToList();
             var files = Directory.GetFiles(currentPath).Select(f => new FileInfo(f)).ToList();
+            var breadcrumbs = GenerateBreadcrumbs(sanitizedPath);
+            var paginatedDirectories = directories.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            var paginatedFiles = files.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
 
             ViewBag.CurrentPath = sanitizedPath;
             ViewBag.Directories = directories;
             ViewBag.Files = files;
             ViewBag.ParentPath = string.IsNullOrEmpty(sanitizedPath) ? "" : Path.GetDirectoryName(sanitizedPath.Replace("/", "\\"))?.Replace("\\", "/") ?? "";
+            ViewBag.Breadcrumbs = breadcrumbs;
+            ViewBag.CurrentPage = page;
+            ViewBag.TotalPages = (int)Math.Ceiling((double)(directories.Count + files.Count) / pageSize);
+
 
             return View();
         }
@@ -317,6 +334,29 @@ namespace FileSystemManager.Controllers
                 return (bytes / 1024.0).ToString("0.00") + " KB";
             else
                 return bytes + " B";
+        }
+
+        private List<Breadcrumb> GenerateBreadcrumbs(string path)
+        {
+            var breadcrumbs = new List<Breadcrumb>();
+            var parts = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+
+            string cumulativePath = "";
+            foreach (var part in parts)
+            {
+                cumulativePath = string.IsNullOrEmpty(cumulativePath) ? part : $"{cumulativePath}/{part}";
+                breadcrumbs.Add(new Breadcrumb { Name = part, Path = cumulativePath });
+            }
+
+            return breadcrumbs;
+        }
+
+        // Other methods remain the same
+
+        public class Breadcrumb
+        {
+            public string Name { get; set; }
+            public string Path { get; set; }
         }
     }
 }
