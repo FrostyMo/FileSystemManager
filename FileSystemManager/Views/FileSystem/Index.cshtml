@@ -1,10 +1,11 @@
 ﻿@{
     ViewData["Title"] = "File System";
     var currentPath = ViewBag.CurrentPath?.ToString() ?? "";
-    var parentPath = ViewBag.ParentPath?.ToString() ?? "";
     var breadcrumbs = ViewBag.Breadcrumbs as List<FileSystemManager.Controllers.FileSystemController.Breadcrumb>;
+    var parentPath = ViewBag.ParentPath?.ToString() ?? "";
     var currentPage = ViewBag.CurrentPage;
     var totalPages = ViewBag.TotalPages;
+    var items = ViewBag.Items as List<System.IO.FileSystemInfo>;
 }
 
 <h1>File System</h1>
@@ -39,63 +40,115 @@
     </p>
 }
 
+<form method="get" asp-action="Index">
+    <input type="hidden" name="path" value="@currentPath" />
+    <div class="input-group mb-3">
+        <input type="text" class="form-control" placeholder="Search..." name="searchQuery" value="@ViewBag.SearchQuery" />
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+    </div>
+</form>
+
 <div class="card mt-4">
     <div class="card-header">
-        <h2>Directories</h2>
+        <h2>Items</h2>
     </div>
     <div class="card-body">
-        <ul class="list-group">
-            @foreach (var directory in ViewBag.Directories)
+        <!-- Add Headers -->
+        <div class="row font-weight-bold border-bottom pb-2">
+            <div class="col-md-5">Name</div>
+            <div class="col-md-4">Date Modified</div>
+            <div class="col-md-2">Size</div>
+            <div class="col-md-1">Owner</div>
+        </div>
+        <ul class="list-group mt-2">
+            @foreach (var item in items)
             {
-                var directoryPath = $"{currentPath}/{directory.Name}".Replace("\\", "/");
-                <li class="list-group-item" data-path="@directoryPath" data-type="directory">
-                    <span class="directory-name">@directory.Name</span>
+                var itemPath = $"{currentPath}/{item.Name}".Replace("\\", "/");
+                <li class="list-group-item d-flex justify-content-left align-items-center" data-path="@itemPath" data-type="@(item is DirectoryInfo ? "directory" : "file")">
+                    <div class="name-column text-truncate">
+                        @if (item is DirectoryInfo)
+                        {
+                            <i class="fas fa-folder"></i> <!-- Font Awesome icon for folders -->
+                        }
+                        else
+                        {
+                            <i class="fas fa-file"></i> <!-- Font Awesome icon for files -->
+                        }
+                        @item.Name
+                    </div>
+                    <div class="date-modified-column">
+                        @if (item is FileSystemInfo fileSystemInfo)
+                        {
+                            <span>@fileSystemInfo.LastWriteTime.ToString("dd MMM yyyy") by Momin</span> <!-- Replace "Momin" with actual modifier name if available -->
+                        }
+                    </div>
+                    <div class="size-column">
+                        @if (item is FileInfo file)
+                        {
+                            <span>@FormatSize(file.Length)</span>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </div>
+                    <div class="owner-column">
+                        <span>Unknown</span> <!-- Placeholder for owner; replace with actual info if available -->
+                    </div>
                 </li>
             }
         </ul>
         <a class="btn btn-primary mt-3" href="@Url.Action("CreateDirectory", new { path = currentPath })">Create New Directory</a>
-    </div>
-</div>
-
-<div class="card mt-4">
-    <div class="card-header">
-        <h2>Files</h2>
-    </div>
-    <div class="card-body">
-        <ul class="list-group">
-            @foreach (var file in ViewBag.Files)
-            {
-                var filePath = $"{currentPath}/{file.Name}".Replace("\\", "/");
-                <li class="list-group-item" data-path="@filePath" data-type="file">
-                    <span class="file-name">@file.Name</span>
-                    <span class="text-muted float-right">@file.CreationTime</span>
-                </li>
-            }
-        </ul>
         <a class="btn btn-primary mt-3" href="@Url.Action("UploadFile", new { path = currentPath })">Upload New File</a>
     </div>
+
+    @functions {
+        public string FormatSize(long bytes)
+        {
+            if (bytes < 1024)
+            {
+                return $"{bytes} B";
+            }
+            else if (bytes < 1048576)
+            {
+                return $"{bytes / 1024.0:F2} KB";
+            }
+            else if (bytes < 1073741824)
+            {
+                return $"{bytes / 1048576.0:F2} MB";
+            }
+            else
+            {
+                return $"{bytes / 1073741824.0:F2} GB";
+            }
+        }
+    }
 </div>
 
 <!-- Pagination Controls -->
-<nav aria-label="Page navigation example">
-    <ul class="pagination">
-        <li class="page-item @(currentPage == 1 ? "disabled" : "")">
-            <a class="page-link" href="@Url.Action("Index", new { path = currentPath, page = currentPage - 1 })" aria-label="Previous">
-                <span aria-hidden="true">&laquo;</span>
-            </a>
-        </li>
-        @for (var i = 1; i <= totalPages; i++)
-        {
-            <li class="page-item @(currentPage == i ? "active" : "")"><a class="page-link" href="@Url.Action("Index", new { path = currentPath, page = i })">@i</a></li>
-        }
-        <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
-            <a class="page-link" href="@Url.Action("Index", new { path = currentPath, page = currentPage + 1 })" aria-label="Next">
-                <span aria-hidden="true">&raquo;</span>
-            </a>
-        </li>
-    </ul>
-</nav>
-
+@if (totalPages > 1)
+{
+    <nav aria-label="Page navigation example">
+        <ul class="pagination justify-content-center mt-3">
+            <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                <a class="page-link" href="@Url.Action("Index", new { path = currentPath, page = currentPage - 1, searchQuery = ViewBag.SearchQuery })" aria-label="Previous">
+                    <span aria-hidden="true">&laquo;</span>
+                </a>
+            </li>
+            @for (var i = 1; i <= totalPages; i++)
+            {
+                <li class="page-item @(currentPage == i ? "active" : "")">
+                    <a class="page-link" href="@Url.Action("Index", new { path = currentPath, page = i, searchQuery = ViewBag.SearchQuery })">@i</a>
+                </li>
+            }
+            <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                <a class="page-link" href="@Url.Action("Index", new { path = currentPath, page = currentPage + 1, searchQuery = ViewBag.SearchQuery })" aria-label="Next">
+                    <span aria-hidden="true">&raquo;</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+}
 
 <!-- Context Menu -->
 <div id="context-menu" class="context-menu">
@@ -108,47 +161,49 @@
 </div>
 
 <!-- Info Modal -->
-<div class="modal fade" tabindex="-1" role="dialog" id="info-modal">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Item Info</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div class="item-info">
-          <p><strong>Create Date:</strong> <span id="create-date"></span></p>
-          <p><strong>Created By:</strong> <span id="created-by"></span></p>
-          <p><strong>Modified Date:</strong> <span id="modified-date"></span></p>
-          <p><strong>Modified By:</strong> <span id="modified-by"></span></p>
-          <p><strong>Size:</strong> <span id="size"></span></p>
-          <p><strong>Location:</strong> <span id="location"></span></p>
+<div class="modal fade" id="info-modal" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="infoModalLabel">File Info</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="item-info">
+                    <p><strong>Created Date:</strong> <span id="create-date"></span></p>
+                    <p><strong>Created By:</strong> <span id="created-by"></span></p>
+                    <p><strong>Modified Date:</strong> <span id="modified-date"></span></p>
+                    <p><strong>Modified By:</strong> <span id="modified-by"></span></p>
+                    <p><strong>Size:</strong> <span id="size"></span></p>
+                    <p><strong>Location:</strong> <span id="location"></span></p>
+                    <p><strong>Expiry Date:</strong> <span id="expiry-date"></span></p>
+                    <p><strong>Issued By:</strong> <span id="issued-by"></span></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
         </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-      </div>
     </div>
-  </div>
-</div>
+   </div>
 
-<!-- File Preview Modal -->
-<div class="modal fade" id="previewModal" tabindex="-1" role="dialog" aria-labelledby="previewModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="previewModalLabel">File Preview</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div id="filePreview"></div>
-      </div>
+    <!-- File Preview Modal -->
+    <div class="modal fade" id="previewModal" tabindex="-1" role="dialog" aria-labelledby="previewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="previewModalLabel">File Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="filePreview"></div>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
-</div>
 
-@section Scripts {
-    <script>
+    @section Scripts {
+        <script>
         document.addEventListener('DOMContentLoaded', function() {
             const contextMenu = document.getElementById('context-menu');
             let selectedElement = null;
@@ -269,7 +324,8 @@
 
             document.getElementById('info').addEventListener('click', function() {
                 const path = selectedElement.getAttribute('data-path');
-                fetch(`@Url.Action("GetItemInfo", "FileSystem")?path=${path}`)
+                const type = selectedElement.getAttribute('data-type');
+                fetch(`@Url.Action("GetItemInfo", "FileSystem")?path=${encodeURIComponent(path)}&type=${type}`)
                     .then(response => response.json())
                     .then(data => {
                         document.getElementById('create-date').textContent = data.createDate;
@@ -278,50 +334,78 @@
                         document.getElementById('modified-by').textContent = data.modifiedBy;
                         document.getElementById('size').textContent = data.size;
                         document.getElementById('location').textContent = data.location;
+                        document.getElementById('expiry-date').textContent = data.expiryDate || 'N/A';
+                        document.getElementById('issued-by').textContent = data.issuedBy || 'N/A';
                         $('#info-modal').modal('show');
                         contextMenu.style.display = 'none';  // Close the context menu
                     });
             });
         });
-    </script>
-    <style>
-        .context-menu {
-            display: none;
-            position: absolute;
-            background-color: white;
-            border: 1px solid #ccc;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
-            width: 150px;  /* Increase the width */
-        }
-        .context-menu ul {
-            list-style: none;
-            margin: 0;
-            padding: 0;
-        }
-        .context-menu ul li {
-            padding: 8px 12px;
-            cursor: pointer;
-            background-color: white;  /* Ensure a single color */
-        }
-        .context-menu ul li:hover {
-            background-color: #eee;  /* Light grey for hover effect */
-        }
-        .list-group-item.highlight {
-            background-color: #f0f0f0;
-        }
-        .list-group-item.highlight-clicked {
-            background-color: #d4edda;
-        }
-        .modal-body p {
-            word-wrap: break-word;
-        }
-        .modal-body .item-info {
-            font-size: 1rem;
-        }
-        .modal-body .item-info span {
-            display: block;
-            margin-bottom: 0.5rem;
-        }
-    </style>
-}
+        </script>
+        <style>
+            .context-menu {
+                display: none;
+                position: absolute;
+                background-color: white;
+                border: 1px solid #ccc;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+                z-index: 1000;
+                width: 150px; /* Increase the width */
+            }
+
+                .context-menu ul {
+                    list-style: none;
+                    margin: 0;
+                    padding: 0;
+                }
+
+                    .context-menu ul li {
+                        padding: 8px 12px;
+                        cursor: pointer;
+                        background-color: white; /* Ensure a single color */
+                    }
+
+                        .context-menu ul li:hover {
+                            background-color: #eee; /* Light grey for hover effect */
+                        }
+
+            .list-group-item.highlight {
+                background-color: #f0f0f0;
+            }
+
+            .list-group-item.highlight-clicked {
+                background-color: #d4edda;
+            }
+
+            .modal-body p {
+                word-wrap: break-word;
+            }
+
+            .modal-body .item-info {
+                font-size: 1rem;
+            }
+
+                .modal-body .item-info span {
+                    display: block;
+                    margin-bottom: 0.5rem;
+                }
+
+            .pagination {
+                justify-content: center;
+                margin-top: 20px;
+            }
+
+            .page-item.active .page-link {
+                background-color: #28a745;
+                border-color: #28a745;
+            }
+
+            .page-link {
+                color: #28a745;
+            }
+
+                .page-link:hover {
+                    color: #218838;
+                }
+        </style>
+    }

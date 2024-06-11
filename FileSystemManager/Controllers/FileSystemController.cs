@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.EntityFrameworkCore;
 using System.IO;
 using System.Linq;
 
@@ -9,15 +10,17 @@ namespace FileSystemManager.Controllers
     {
         private readonly string rootPath;
         private readonly IConfiguration configuration;
-        public FileSystemController(IConfiguration configuration)
+        private readonly ApplicationDbContext _context;
+
+        public FileSystemController(IConfiguration configuration, ApplicationDbContext context)
         {
             this.configuration = configuration;
+            _context = context;
             rootPath = configuration["PhotoDirectory"] ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
         }
         
-        //private readonly string rootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
 
-        public IActionResult Index(string path = "", int page = 1, int pageSize = 10)
+        public IActionResult Index(string path = "", int page = 1, int pageSize = 10, string searchQuery = "")
         {
             var sanitizedPath = string.IsNullOrEmpty(path) ? "" : path.TrimStart('/');
             var currentPath = Path.Combine(rootPath, sanitizedPath);
@@ -27,21 +30,38 @@ namespace FileSystemManager.Controllers
                 return NotFound();
             }
 
-            var directories = Directory.GetDirectories(currentPath).Select(d => new DirectoryInfo(d)).ToList();
-            var files = Directory.GetFiles(currentPath).Select(f => new FileInfo(f)).ToList();
+            
+            var directories = Directory.GetDirectories(currentPath)
+                               .Select(d => new DirectoryInfo(d))
+                               .OrderByDescending(d => d.CreationTime) // Sort by creation time to ensure new folders are on top
+                               .ToList();
+
+            var files = Directory.GetFiles(currentPath)
+                                 .Select(f => new FileInfo(f))
+                                 .OrderByDescending(f => f.CreationTime) // Sort by creation time to ensure new files are on top
+                                 .ToList();
+
+            if (!string.IsNullOrEmpty(searchQuery))
+            {
+                directories = directories.Where(d => d.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
+                files = files.Where(f => f.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
             var breadcrumbs = GenerateBreadcrumbs(sanitizedPath);
-            var paginatedDirectories = directories.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-            var paginatedFiles = files.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            
+            var items = directories.Cast<FileSystemInfo>().Concat(files.Cast<FileSystemInfo>()).ToList();
+            var paginatedItems = items.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+
 
 
             ViewBag.CurrentPath = sanitizedPath;
-            ViewBag.Directories = directories;
-            ViewBag.Files = files;
+            ViewBag.Items = paginatedItems;
             ViewBag.ParentPath = string.IsNullOrEmpty(sanitizedPath) ? "" : Path.GetDirectoryName(sanitizedPath.Replace("/", "\\"))?.Replace("\\", "/") ?? "";
             ViewBag.Breadcrumbs = breadcrumbs;
             ViewBag.CurrentPage = page;
-            ViewBag.TotalPages = (int)Math.Ceiling((double)(directories.Count + files.Count) / pageSize);
-
+            ViewBag.TotalPages = (int)Math.Ceiling((double)items.Count / pageSize);
+            ViewBag.SearchQuery = searchQuery;
 
             return View();
         }
@@ -77,7 +97,7 @@ namespace FileSystemManager.Controllers
         }
 
         [HttpPost]
-        public IActionResult UploadFile(IFormFile file, string path)
+        public async Task<IActionResult> UploadFile(IFormFile file, string path, string issuedBy, DateTime? expiryDate)
         {
             if (file != null && file.Length > 0)
             {
@@ -90,13 +110,68 @@ namespace FileSystemManager.Controllers
                     return Conflict(new { suggestedName = GetUniqueFileName(filePath) });
                 }
 
-                using (var stream = new FileStream(filePath, FileMode.Create))
-                {
-                    file.CopyTo(stream);
-                }
 
-                // Debug logging
-                Console.WriteLine($"Uploaded file: {filePath}");
+                //using (var stream = new FileStream(filePath, FileMode.Create))
+                //{
+                //    file.CopyTo(stream);
+                //}
+
+                //// Save metadata to database
+                //var fileMetadata = new FileMetadata
+                //{
+                //    FileName = file.FileName,
+                //    FilePath = filePath,
+                //    FileSize = file.Length,
+                //    DateModified = DateTime.Now,
+                //    ModifiedBy = "Momin",
+                //    Owner = "Momin",
+                //    ExpiryDate = expiryDate,
+                //    IssuedBy = issuedBy
+                //};
+
+                //_context.FileMetadata.Add(fileMetadata);
+                //await _context.SaveChangesAsync();
+
+                //// Debug logging
+                //Console.WriteLine($"Uploaded file: {filePath}");
+
+                using (var transaction = await _context.Database.BeginTransactionAsync()) 
+                {
+                    try
+                    {
+                        using (var stream = new FileStream(filePath, FileMode.Create))
+                        {
+                            await file.CopyToAsync(stream);
+                        }
+
+                        // Save metadata to database
+                        var fileMetadata = new FileMetadata
+                        {
+                            FileName = file.FileName,
+                            FilePath = filePath,
+                            FileSize = file.Length,
+                            DateModified = DateTime.Now,
+                            ModifiedBy = "Momin", // Hardcoded for now
+                            Owner = "Momin", // Hardcoded for now
+                            ExpiryDate = expiryDate,
+                            IssuedBy = issuedBy
+                        };
+
+                        _context.FileMetadata.Add(fileMetadata);
+                        await _context.SaveChangesAsync();
+
+                        await transaction.CommitAsync(); 
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync(); 
+                        if (System.IO.File.Exists(filePath))
+                        {
+                            System.IO.File.Delete(filePath); // Clean up the file if transaction fails
+                        }
+                        return StatusCode(500, "An error occurred while uploading the file.");
+                    }
+                }
             }
 
             return RedirectToAction("Index", new { path });
@@ -266,12 +341,94 @@ namespace FileSystemManager.Controllers
             }
         }
 
-        [HttpGet]
-        public IActionResult GetItemInfo(string path)
+        //[HttpGet]
+        //public async Task<IActionResult> GetItemInfo(string path)
+        //{
+        //    if (string.IsNullOrEmpty(path))
+        //    {
+        //        return BadRequest("Invalid path");
+        //    }
+
+        //    var decodedPath = System.Net.WebUtility.UrlDecode(path);
+        //    var fullPath = Path.Combine(rootPath, decodedPath.TrimStart('/'));
+        //    var relativePath = Path.GetRelativePath(rootPath, fullPath).Replace("\\", "/");
+
+        //    //try
+        //    //{
+        //    //var info = new
+        //    //{
+        //    //    createDate = System.IO.File.GetCreationTime(fullPath).ToString("G"),
+        //    //    createdBy = "Momin", // Placeholder, should be replaced with actual data
+        //    //    modifiedDate = System.IO.File.GetLastWriteTime(fullPath).ToString("G"),
+        //    //    modifiedBy = "Momin", // Placeholder, should be replaced with actual data
+        //    //    size = GetDirectorySize(fullPath),
+        //    //    location = relativePath
+        //    //};
+        //    //var fileMetadata = await _context.FileMetadata.FirstOrDefaultAsync(fm => fm.FilePath == fullPath);
+
+        //    //if (fileMetadata == null)
+        //    //{
+        //    //    return NotFound();
+        //    //}
+
+        //    //var info = new
+        //    //{
+        //    //    createDate = System.IO.File.GetCreationTime(fullPath).ToString("G"),
+        //    //    createdBy = fileMetadata.ModifiedBy,
+        //    //    modifiedDate = fileMetadata.DateModified.ToString("G"),
+        //    //    modifiedBy = fileMetadata.ModifiedBy,
+        //    //    size = FormatSize(fileMetadata.FileSize),
+        //    //    location = relativePath,
+        //    //    expiryDate = fileMetadata.ExpiryDate?.ToString("G"),
+        //    //    issuedBy = fileMetadata.IssuedBy
+        //    //};
+        //    try
+        //    {
+        //        var fileMetadata = await _context.FileMetadata.FirstOrDefaultAsync(fm => fm.FilePath == fullPath);
+
+        //        var createDate = System.IO.File.GetCreationTime(fullPath).ToString("G");
+        //        var modifiedDate = System.IO.File.GetLastWriteTime(fullPath).ToString("G");
+        //        var size = System.IO.File.Exists(fullPath) ? new FileInfo(fullPath).Length : 0;
+        //        var owner = "Unknown";
+        //        var modifiedBy = "Unknown";
+        //        var expiryDate = (DateTime?)null;
+        //        var issuedBy = "Unknown";
+
+        //        if (fileMetadata != null)
+        //        {
+        //            owner = fileMetadata.Owner;
+        //            modifiedBy = fileMetadata.ModifiedBy;
+        //            expiryDate = fileMetadata.ExpiryDate;
+        //            issuedBy = fileMetadata.IssuedBy;
+        //            size = fileMetadata.FileSize;
+        //        }
+
+        //        var info = new
+        //        {
+        //            createDate,
+        //            createdBy = owner,
+        //            modifiedDate,
+        //            modifiedBy,
+        //            size = FormatSize(size),
+        //            location = relativePath,
+        //            expiryDate = expiryDate?.ToString("G") ?? "N/A",
+        //            issuedBy
+        //        };
+
+
+        //        return Json(info);
+        //    }
+        //    catch
+        //    {
+        //        return StatusCode(500, "Error retrieving item info");
+        //    }
+        //}
+
+        public async Task<IActionResult> GetItemInfo(string path, string type) 
         {
-            if (string.IsNullOrEmpty(path))
+            if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(type)) 
             {
-                return BadRequest("Invalid path");
+                return BadRequest("Invalid path or type"); 
             }
 
             var decodedPath = System.Net.WebUtility.UrlDecode(path);
@@ -280,14 +437,56 @@ namespace FileSystemManager.Controllers
 
             try
             {
+                bool isDirectory = type == "directory"; 
+                bool isFile = type == "file"; 
+
+                if (!isDirectory && !isFile) 
+                {
+                    return NotFound(); 
+                }
+
+                var fileMetadata = await _context.FileMetadata.FirstOrDefaultAsync(fm => fm.FilePath == fullPath);
+
+                var createDate = isFile ? System.IO.File.GetCreationTime(fullPath).ToString("G") : Directory.GetCreationTime(fullPath).ToString("G"); 
+                var modifiedDate = isFile ? System.IO.File.GetLastWriteTime(fullPath).ToString("G") : Directory.GetLastWriteTime(fullPath).ToString("G"); 
+                var owner = "Unknown";
+                var modifiedBy = "Unknown";
+                var expiryDate = (DateTime?)null;
+                var issuedBy = "Unknown";
+                long size = 0;
+
+                if (fileMetadata != null)
+                {
+                    owner = fileMetadata.Owner;
+                    modifiedBy = fileMetadata.ModifiedBy;
+                    expiryDate = fileMetadata.ExpiryDate;
+                    issuedBy = fileMetadata.IssuedBy;
+                    size = fileMetadata.FileSize;
+                }
+                else
+                {
+                    if (isFile) 
+                    {
+                        var fileInfo = new FileInfo(fullPath);
+                        size = fileInfo.Length;
+                    }
+                    else if (isDirectory) 
+                    {
+                        var directoryInfo = new DirectoryInfo(fullPath);
+                        size = directoryInfo.EnumerateFiles("*", SearchOption.AllDirectories).Sum(fi => fi.Length);
+                    }
+                }
+
                 var info = new
                 {
-                    createDate = System.IO.File.GetCreationTime(fullPath).ToString("G"),
-                    createdBy = "Unknown", // Placeholder, should be replaced with actual data
-                    modifiedDate = System.IO.File.GetLastWriteTime(fullPath).ToString("G"),
-                    modifiedBy = "Unknown", // Placeholder, should be replaced with actual data
-                    size = GetDirectorySize(fullPath),
-                    location = relativePath
+                    createDate,
+                    createdBy = owner,
+                    modifiedDate,
+                    modifiedBy,
+                    size = FormatSize(size),
+                    location = relativePath,
+                    expiryDate = expiryDate?.ToString("G") ?? "N/A",
+                    issuedBy
                 };
 
                 return Json(info);

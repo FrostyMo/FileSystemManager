@@ -8,9 +8,17 @@
 <form id="uploadForm" asp-action="UploadFile" method="post" enctype="multipart/form-data">
     <div class="form-group">
         <label for="file">File</label>
-        <input type="file" class="form-control-file" id="file" name="file" required />
-        <input type="hidden" name="path" value="@currentPath" />
+        <input type="file" class="form-control" id="file" name="file" required>
     </div>
+    <div class="form-group">
+        <label for="issuedBy">Issued By</label>
+        <input type="text" class="form-control" id="issuedBy" name="issuedBy">
+    </div>
+    <div class="form-group">
+        <label for="expiryDate">Expiry Date</label>
+        <input type="date" class="form-control" id="expiryDate" name="expiryDate">
+    </div>
+    <input type="hidden" name="path" value="@currentPath" />
     <button type="submit" class="btn btn-primary">Upload</button>
 </form>
 

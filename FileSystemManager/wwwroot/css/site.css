@@ -1,4 +1,7 @@
-﻿body {
+﻿/* Font Awesome CDN for Icons */
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css');
+
+body {
     background-color: #f8f9fa;
     color: #343a40;
     min-height: 100vh;
@@ -138,3 +141,84 @@ ul {
             .context-menu ul li:hover {
                 background-color: #eee; /* Light grey for hover effect */
             }
+
+
+/* Add styles for column headers */
+.card-body .row.font-weight-bold.border-bottom.pb-2 {
+    font-weight: bold;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 10px;
+}
+
+.list-group-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+}
+
+    .list-group-item .name-column {
+        flex: 0 0 42%;
+        max-width: 42%;
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .list-group-item .date-modified-column {
+        flex: 0 0 33%;
+        max-width: 33%;
+        display: flex;
+        align-items: flex-start;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        justify-content: flex-start; /* Align text to the start */
+    }
+
+    .list-group-item .size-column {
+        flex: 0 0 8%;
+        max-width: 8%;
+        display: flex;
+        align-items: flex-start;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        justify-content: flex-start; /* Align text to the start */
+    }
+
+    .list-group-item .owner-column {
+        flex: 0 0 17%;
+        max-width: 17%;
+        display: flex;
+        align-items: flex-start;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        justify-content: flex-start; /* Align text to the start */
+    }
+
+    .list-group-item .fas {
+        margin-right: 10px;
+        color: #28a745;
+    }
+
+.pagination {
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.page-item.active .page-link {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.page-link {
+    color: #28a745;
+}
+
+    .page-link:hover {
+        color: #218838;
+    }
