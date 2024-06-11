@@ -30,21 +30,34 @@ namespace FileSystemManager.Controllers
                 return NotFound();
             }
 
-            
-            var directories = Directory.GetDirectories(currentPath)
+            List<DirectoryInfo> directories;
+            List<FileInfo> files;
+
+            // If searchQuery not empty, recursively search all directories.
+            if (!string.IsNullOrEmpty(searchQuery))
+            {
+                // Perform recursive search
+                directories = Directory.GetDirectories(rootPath, "*", SearchOption.AllDirectories)
+                                       .Select(d => new DirectoryInfo(d))
+                                       .Where(d => d.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
+                                       .ToList();
+
+                files = Directory.GetFiles(rootPath, "*", SearchOption.AllDirectories)
+                                 .Select(f => new FileInfo(f))
+                                 .Where(f => f.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
+                                 .ToList();
+            }
+            else
+            {
+                directories = Directory.GetDirectories(currentPath)
                                .Select(d => new DirectoryInfo(d))
                                .OrderByDescending(d => d.CreationTime) // Sort by creation time to ensure new folders are on top
                                .ToList();
 
-            var files = Directory.GetFiles(currentPath)
+                files = Directory.GetFiles(currentPath)
                                  .Select(f => new FileInfo(f))
                                  .OrderByDescending(f => f.CreationTime) // Sort by creation time to ensure new files are on top
                                  .ToList();
-
-            if (!string.IsNullOrEmpty(searchQuery))
-            {
-                directories = directories.Where(d => d.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
-                files = files.Where(f => f.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
             }
 
             var breadcrumbs = GenerateBreadcrumbs(sanitizedPath);
@@ -62,6 +75,7 @@ namespace FileSystemManager.Controllers
             ViewBag.CurrentPage = page;
             ViewBag.TotalPages = (int)Math.Ceiling((double)items.Count / pageSize);
             ViewBag.SearchQuery = searchQuery;
+            ViewBag.RootPath = rootPath;
 
             return View();
         }
