@@ -191,6 +191,7 @@ namespace FileSystemManager.Controllers
             return RedirectToAction("Index", new { path });
         }
 
+
         [HttpPost]
         public IActionResult ReplaceFile(IFormFile file, string path)
         {
