@@ -320,7 +320,6 @@ namespace FileSystemManager.Controllers
                 return StatusCode(500, "Error deleting item");
             }
         }
-
         [HttpPost]
         public IActionResult RenameItem(string path, string newName)
         {
@@ -329,9 +328,20 @@ namespace FileSystemManager.Controllers
                 return BadRequest("Invalid path or new name");
             }
 
-            var decodedPath = System.Net.WebUtility.UrlDecode(path);
-            var fullPath = Path.Combine(rootPath, decodedPath.TrimStart('/'));
-            var newFullPath = Path.Combine(Path.GetDirectoryName(fullPath), newName);
+            // Decode and normalize the path
+            var decodedPath = System.Net.WebUtility.UrlDecode(path).TrimStart('/').Replace('\\', '/');
+            var fullPath = Path.Combine(rootPath, decodedPath).Replace('\\', '/');
+
+            // Extract the file extension from the original path
+            var extension = Path.GetExtension(fullPath);
+
+            // Ensure the new name contains the same extension
+            if (!newName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            {
+                newName = Path.ChangeExtension(newName, extension);
+            }
+
+            var newFullPath = Path.Combine(Path.GetDirectoryName(fullPath), newName).Replace('\\', '/');
 
             try
             {
@@ -347,97 +357,30 @@ namespace FileSystemManager.Controllers
                 {
                     return NotFound();
                 }
+                // Normalize the path for database search
+                var normalizedPath = decodedPath.Replace('\\', '/');
+                // Fetch all records and filter in memory
+                var fileMetadataList = _context.FileMetadata.ToList();
+                var fileMetadata = fileMetadataList.SingleOrDefault(fm => fm.FilePath.Replace('\\', '/') == normalizedPath);
+                if (fileMetadata == null)
+                {
+                    return NotFound("File metadata not found in the database");
+                }
+                // Update file metadata with new name and path
+                var newFilePath = Path.Combine(Path.GetDirectoryName(normalizedPath), newName).Replace('\\', '/');
+                fileMetadata.FileName = newName;
+                fileMetadata.FilePath = newFilePath;
+                fileMetadata.DateModified = DateTime.Now;
+                _context.FileMetadata.Update(fileMetadata);
+                _context.SaveChanges();
 
                 return Ok();
             }
-            catch
+            catch (Exception ex)
             {
-                return StatusCode(500, "Error renaming item");
+                return StatusCode(500, "Error renaming item: " + ex.Message);
             }
         }
-
-        //[HttpGet]
-        //public async Task<IActionResult> GetItemInfo(string path)
-        //{
-        //    if (string.IsNullOrEmpty(path))
-        //    {
-        //        return BadRequest("Invalid path");
-        //    }
-
-        //    var decodedPath = System.Net.WebUtility.UrlDecode(path);
-        //    var fullPath = Path.Combine(rootPath, decodedPath.TrimStart('/'));
-        //    var relativePath = Path.GetRelativePath(rootPath, fullPath).Replace("\\", "/");
-
-        //    //try
-        //    //{
-        //    //var info = new
-        //    //{
-        //    //    createDate = System.IO.File.GetCreationTime(fullPath).ToString("G"),
-        //    //    createdBy = "Momin", // Placeholder, should be replaced with actual data
-        //    //    modifiedDate = System.IO.File.GetLastWriteTime(fullPath).ToString("G"),
-        //    //    modifiedBy = "Momin", // Placeholder, should be replaced with actual data
-        //    //    size = GetDirectorySize(fullPath),
-        //    //    location = relativePath
-        //    //};
-        //    //var fileMetadata = await _context.FileMetadata.FirstOrDefaultAsync(fm => fm.FilePath == fullPath);
-
-        //    //if (fileMetadata == null)
-        //    //{
-        //    //    return NotFound();
-        //    //}
-
-        //    //var info = new
-        //    //{
-        //    //    createDate = System.IO.File.GetCreationTime(fullPath).ToString("G"),
-        //    //    createdBy = fileMetadata.ModifiedBy,
-        //    //    modifiedDate = fileMetadata.DateModified.ToString("G"),
-        //    //    modifiedBy = fileMetadata.ModifiedBy,
-        //    //    size = FormatSize(fileMetadata.FileSize),
-        //    //    location = relativePath,
-        //    //    expiryDate = fileMetadata.ExpiryDate?.ToString("G"),
-        //    //    issuedBy = fileMetadata.IssuedBy
-        //    //};
-        //    try
-        //    {
-        //        var fileMetadata = await _context.FileMetadata.FirstOrDefaultAsync(fm => fm.FilePath == fullPath);
-
-        //        var createDate = System.IO.File.GetCreationTime(fullPath).ToString("G");
-        //        var modifiedDate = System.IO.File.GetLastWriteTime(fullPath).ToString("G");
-        //        var size = System.IO.File.Exists(fullPath) ? new FileInfo(fullPath).Length : 0;
-        //        var owner = "Unknown";
-        //        var modifiedBy = "Unknown";
-        //        var expiryDate = (DateTime?)null;
-        //        var issuedBy = "Unknown";
-
-        //        if (fileMetadata != null)
-        //        {
-        //            owner = fileMetadata.Owner;
-        //            modifiedBy = fileMetadata.ModifiedBy;
-        //            expiryDate = fileMetadata.ExpiryDate;
-        //            issuedBy = fileMetadata.IssuedBy;
-        //            size = fileMetadata.FileSize;
-        //        }
-
-        //        var info = new
-        //        {
-        //            createDate,
-        //            createdBy = owner,
-        //            modifiedDate,
-        //            modifiedBy,
-        //            size = FormatSize(size),
-        //            location = relativePath,
-        //            expiryDate = expiryDate?.ToString("G") ?? "N/A",
-        //            issuedBy
-        //        };
-
-
-        //        return Json(info);
-        //    }
-        //    catch
-        //    {
-        //        return StatusCode(500, "Error retrieving item info");
-        //    }
-        //}
 
         public async Task<IActionResult> GetItemInfo(string path, string type) 
         {
