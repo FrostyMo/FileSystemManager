@@ -11,7 +11,72 @@
 }
 
 <h1>File System</h1>
+<style>
+    .context-menu {
+        display: none;
+        position: absolute;
+        background-color: white;
+        border: 1px solid #ccc;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+        width: 150px; /* Increase the width */
+    }
 
+        .context-menu ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+            .context-menu ul li {
+                padding: 8px 12px;
+                cursor: pointer;
+                background-color: white; /* Ensure a single color */
+            }
+
+                .context-menu ul li:hover {
+                    background-color: #eee; /* Light grey for hover effect */
+                }
+
+    .list-group-item.highlight {
+        background-color: #f0f0f0;
+    }
+
+    .list-group-item.highlight-clicked {
+        background-color: #d4edda;
+    }
+
+    .modal-body p {
+        word-wrap: break-word;
+    }
+
+    .modal-body .item-info {
+        font-size: 1rem;
+    }
+
+        .modal-body .item-info span {
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+    .pagination {
+        justify-content: center;
+        margin-top: 20px;
+    }
+
+    .page-item.active .page-link {
+        background-color: #28a745;
+        border-color: #28a745;
+    }
+
+    .page-link {
+        color: #28a745;
+    }
+
+        .page-link:hover {
+            color: #218838;
+        }
+</style>
 <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="@Url.Action("Index", new { path = "" })">Home</a></li>
@@ -214,6 +279,7 @@
 </div>
 
 @section Scripts {
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const contextMenu = document.getElementById('context-menu');
@@ -353,70 +419,5 @@
             });
         });
     </script>
-    <style>
-        .context-menu {
-            display: none;
-            position: absolute;
-            background-color: white;
-            border: 1px solid #ccc;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
-            width: 150px; /* Increase the width */
-        }
-
-            .context-menu ul {
-                list-style: none;
-                margin: 0;
-                padding: 0;
-            }
-
-                .context-menu ul li {
-                    padding: 8px 12px;
-                    cursor: pointer;
-                    background-color: white; /* Ensure a single color */
-                }
-
-                    .context-menu ul li:hover {
-                        background-color: #eee; /* Light grey for hover effect */
-                    }
-
-        .list-group-item.highlight {
-            background-color: #f0f0f0;
-        }
-
-        .list-group-item.highlight-clicked {
-            background-color: #d4edda;
-        }
-
-        .modal-body p {
-            word-wrap: break-word;
-        }
-
-        .modal-body .item-info {
-            font-size: 1rem;
-        }
-
-            .modal-body .item-info span {
-                display: block;
-                margin-bottom: 0.5rem;
-            }
-
-        .pagination {
-            justify-content: center;
-            margin-top: 20px;
-        }
-
-        .page-item.active .page-link {
-            background-color: #28a745;
-            border-color: #28a745;
-        }
-
-        .page-link {
-            color: #28a745;
-        }
-
-            .page-link:hover {
-                color: #218838;
-            }
-    </style>
+   
 }

@@ -1,0 +1,135 @@
+﻿
+<style>
+    .context-menu {
+        display: none;
+        position: absolute;
+        background-color: white;
+        border: 1px solid #ccc;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+        width: 150px; /* Increase the width */
+    }
+
+        .context-menu ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+            .context-menu ul li {
+                padding: 8px 12px;
+                cursor: pointer;
+                background-color: white; /* Ensure a single color */
+            }
+
+                .context-menu ul li:hover {
+                    background-color: #eee; /* Light grey for hover effect */
+                }
+
+    .list-group-item.highlight {
+        background-color: #f0f0f0;
+    }
+
+    .list-group-item.highlight-clicked {
+        background-color: #d4edda;
+    }
+
+    .modal-body p {
+        word-wrap: break-word;
+    }
+
+    .modal-body .item-info {
+        font-size: 1rem;
+    }
+
+        .modal-body .item-info span {
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+    .pagination {
+        justify-content: center;
+        margin-top: 20px;
+    }
+
+    .page-item.active .page-link {
+        background-color: #28a745;
+        border-color: #28a745;
+    }
+
+    .page-link {
+        color: #28a745;
+    }
+
+        .page-link:hover {
+            color: #218838;
+        }
+</style>
+<div class="card mt-4">
+    <div class="card-header">
+        <h2>Recycle Bin Items12</h2>
+    </div>
+    <div class="card-body">
+        <ul id="recycleBinList" class="list-group mt-2">
+            <!-- Recycle bin items will be dynamically added here -->
+        </ul>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            // Function to fetch and display recycle bin items
+            function fetchRecycleBinItems() {
+                $.getJSON('@Url.Action("GetRecycleBinItems", "FileSystem")')
+                    .done(function (data) {
+                        const recycleBinList = $('#recycleBinList');
+                        recycleBinList.empty(); // Clear existing items
+
+                        $.each(data, function (index, item) {
+                            const li = $('<li>').addClass('list-group-item');
+                            li.html(`
+                                                    <div class="name-column text-truncate">
+                                                        <i class="fas fa-trash"></i> <!-- Font Awesome icon for deleted items -->
+                                                        ${item.fileName}
+                                                    </div>
+                                                    <div class="date-modified-column">
+                                                        <span>${new Date(item.dateModified).toLocaleString()}</span>
+                                                    </div>
+                                                    <div class="actions-column">
+                                                        <button class="btn btn-sm btn-primary restore-btn" data-file-id="${item.id}">Restore</button>
+                                                    </div>
+                                                `);
+                            recycleBinList.append(li);
+
+                            // Add click event listener to restore button
+                            li.find('.restore-btn').click(function () {
+                                const fileId = $(this).data('file-id');
+                                if (confirm(`Are you sure you want to restore ${item.fileName}?`)) {
+                                    $.ajax({
+                                        url: `@Url.Action("RestoreItem", "FileSystem")/${fileId}`,
+                                        method: 'PUT',
+                                        success: function (response) {
+                                            li.remove();
+                                            alert('File restored successfully.');
+                                        },
+                                        error: function (xhr, status, error) {
+                                            alert('Error restoring file: ' + error);
+                                        }
+                                    });
+                                }
+                            });
+                        });
+                    })
+                    .fail(function (jqXHR, textStatus, errorThrown) {
+                        console.error('Error fetching recycle bin items:', textStatus, errorThrown);
+                    });
+            }
+
+            // Call fetchRecycleBinItems on page load
+            fetchRecycleBinItems();
+        });
+    </script>
+}
