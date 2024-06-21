@@ -11,72 +11,6 @@
 }
 
 <h1>File System</h1>
-<style>
-    .context-menu {
-        display: none;
-        position: absolute;
-        background-color: white;
-        border: 1px solid #ccc;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-        z-index: 1000;
-        width: 150px; /* Increase the width */
-    }
-
-        .context-menu ul {
-            list-style: none;
-            margin: 0;
-            padding: 0;
-        }
-
-            .context-menu ul li {
-                padding: 8px 12px;
-                cursor: pointer;
-                background-color: white; /* Ensure a single color */
-            }
-
-                .context-menu ul li:hover {
-                    background-color: #eee; /* Light grey for hover effect */
-                }
-
-    .list-group-item.highlight {
-        background-color: #f0f0f0;
-    }
-
-    .list-group-item.highlight-clicked {
-        background-color: #d4edda;
-    }
-
-    .modal-body p {
-        word-wrap: break-word;
-    }
-
-    .modal-body .item-info {
-        font-size: 1rem;
-    }
-
-        .modal-body .item-info span {
-            display: block;
-            margin-bottom: 0.5rem;
-        }
-
-    .pagination {
-        justify-content: center;
-        margin-top: 20px;
-    }
-
-    .page-item.active .page-link {
-        background-color: #28a745;
-        border-color: #28a745;
-    }
-
-    .page-link {
-        color: #28a745;
-    }
-
-        .page-link:hover {
-            color: #218838;
-        }
-</style>
 <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="@Url.Action("Index", new { path = "" })">Home</a></li>
@@ -119,6 +53,18 @@
     <div class="card-header">
         <h2>Items</h2>
     </div>
+    <div id="selectionActions" style="display: none;">
+        <div class="alert alert-info d-flex align-items-center" role="alert">
+            <button type="button" class="btn-close" aria-label="Close" id="deselectAll"></button>
+            <span id="selectedCount"></span>&nbspitem(s) selected
+            <button type="button" id="downloadSelected" class="btn btn-primary">
+                <i class="fas fa-download"></i>
+            </button>
+            <button type="button" id="deleteSelected" class="btn btn-danger">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    </div>
     <div class="card-body">
         <!-- Add Headers -->
         <div class="row font-weight-bold border-bottom pb-2">
@@ -129,17 +75,16 @@
         </div>
         <ul class="list-group mt-2">
             @foreach (var item in items)
-                {
-                    //var itemPath = $"{currentPath}/{item.Name}".Replace("\\", "/");
+            {
+                //var itemPath = $"{currentPath}/{item.Name}".Replace("\\", "/");
 
-                    var itemPath = item.FullName.Replace("\\", "/");
-                    
-                    // If its rootpath, dont remove anything
-                    // otherwise, remove root to make relative
-                    @if (!itemPath.Equals(rootPath))
-                        itemPath = itemPath.Replace(rootPath, "");
+                var itemPath = item.FullName.Replace("\\", "/");
 
-                    
+                // If its rootpath, dont remove anything
+                // otherwise, remove root to make relative
+                @if (!itemPath.Equals(rootPath))
+                    itemPath = itemPath.Replace(rootPath, "");
+
                 <li class="list-group-item d-flex justify-content-left align-items-center" data-path="@itemPath" data-type="@(item is DirectoryInfo ? "directory" : "file")">
                     <div class="name-column text-truncate">
                         @if (item is DirectoryInfo)
@@ -284,6 +229,20 @@
         document.addEventListener('DOMContentLoaded', function() {
             const contextMenu = document.getElementById('context-menu');
             let selectedElement = null;
+            let selectedItems = [];
+            let shiftPressed = false;
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Shift') {
+                    shiftPressed = true;
+                }
+            });
+
+            document.addEventListener('keyup', function (event) {
+                if (event.key === 'Shift') {
+                    shiftPressed = false;
+                }
+            });
 
             document.addEventListener('click', function(event) {
                 if (!event.target.closest('.list-group-item') && !event.target.closest('#context-menu')) {
@@ -314,13 +273,50 @@
             });
 
             document.querySelectorAll('.list-group-item').forEach(item => {
-                item.addEventListener('mouseenter', function() {
+                item.addEventListener('mouseenter', function () {
                     this.classList.add('highlight');
                 });
-                item.addEventListener('mouseleave', function() {
+                item.addEventListener('mouseleave', function () {
                     this.classList.remove('highlight');
                 });
-                item.addEventListener('dblclick', function() {
+                item.addEventListener('click', function (event) {
+                    if (shiftPressed) {
+                        this.classList.toggle('selected');
+                        const itemPath = this.getAttribute('data-path');
+                        if (this.classList.contains('selected')) {
+                            selectedItems.push(itemPath);
+                        } else {
+                            selectedItems = selectedItems.filter(path => path !== itemPath);
+                        }
+
+                        if (selectedItems.length > 0) {
+                            document.getElementById('selectionActions').style.display = 'block';
+                            document.getElementById('selectedCount').textContent = selectedItems.length;
+                        } else {
+                            document.getElementById('selectionActions').style.display = 'none';
+                        }
+
+                        document.querySelectorAll('.list-group-item').forEach(item => {
+                            if (selectedItems.includes(item.getAttribute('data-path'))) {
+                                item.classList.add('selected-highlight');
+                            } else {
+                                item.classList.remove('selected-highlight');
+                            }
+                        });
+                    } else {
+                        document.querySelectorAll('.list-group-item').forEach(item => {
+                            item.classList.remove('selected');
+                            item.classList.remove('selected-highlight');
+                        });
+                        selectedItems = [];
+                        this.classList.add('selected');
+                        this.classList.add('selected-highlight');
+                        selectedItems.push(this.getAttribute('data-path'));
+                        document.getElementById('selectionActions').style.display = 'block';
+                        document.getElementById('selectedCount').textContent = selectedItems.length;
+                    }
+                });
+                item.addEventListener('dblclick', function () {
                     const path = this.getAttribute('data-path');
                     const type = this.getAttribute('data-type');
                     if (type === 'directory') {
@@ -417,7 +413,204 @@
                         contextMenu.style.display = 'none';  // Close the context menu
                     });
             });
+
+            document.getElementById('downloadSelected').addEventListener('click', function() {
+                if (selectedItems.length === 0) {
+                    alert('No files selected.');
+                    return;
+                }
+
+                fetch('@Url.Action("DownloadSelected", "FileSystem")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(selectedItems)
+                })
+                .then(response => response.blob())
+                .then(blob => {
+                    var url = window.URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'selected_files.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+
+                    // Deselect items after download
+                    document.querySelectorAll('.list-group-item.selected').forEach(item => {
+                        item.classList.remove('selected');
+                        item.classList.remove('selected-highlight');
+                    });
+                    selectedItems = [];
+                    document.getElementById('selectionActions').style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error downloading files.');
+                });
+            });
+
+            document.getElementById('deleteSelected').addEventListener('click', function() {
+                if (selectedItems.length === 0) {
+                    alert('No files selected.');
+                    return;
+                }
+
+                if (!confirm('Are you sure you want to delete the selected items?')) {
+                    return;
+                }
+
+                fetch('@Url.Action("DeleteSelected", "FileSystem")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(selectedItems)
+                })
+                .then(response => {
+                    if (response.ok) {
+                        selectedItems.forEach(itemPath => {
+                            document.querySelector(`.list-group-item[data-path="${itemPath}"]`).remove();
+                        });
+
+                        selectedItems = [];
+                        document.getElementById('selectionActions').style.display = 'none';
+                    } else {
+                        alert('Error deleting files.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error deleting files.');
+                });
+            });
+
+            document.getElementById('deselectAll').addEventListener('click', function() {
+                document.querySelectorAll('.list-group-item.selected').forEach(item => {
+                    item.classList.remove('selected');
+                    item.classList.remove('selected-highlight');
+                });
+                selectedItems = [];
+                document.getElementById('selectionActions').style.display = 'none';
+            });
         });
     </script>
-   
+    <style>
+        .context-menu {
+            display: none;
+            position: absolute;
+            background-color: white;
+            border: 1px solid #ccc;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            width: 150px; /* Increase the width */
+        }
+
+            .context-menu ul {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+            }
+
+                .context-menu ul li {
+                    padding: 8px 12px;
+                    cursor: pointer;
+                    background-color: white; /* Ensure a single color */
+                }
+
+                    .context-menu ul li:hover {
+                        background-color: #eee; /* Light grey for hover effect */
+                    }
+
+        .list-group-item.highlight {
+            background-color: #f0f0f0;
+        }
+
+        .list-group-item.highlight-clicked {
+            background-color: #d4edda;
+        }
+
+        .modal-body p {
+            word-wrap: break-word;
+        }
+
+        .modal-body .item-info {
+            font-size: 1rem;
+        }
+
+            .modal-body .item-info span {
+                display: block;
+                margin-bottom: 0.5rem;
+            }
+
+        .pagination {
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .page-item.active .page-link {
+            background-color: #28a745;
+            border-color: #28a745;
+        }
+
+        .page-link {
+            color: #28a745;
+        }
+
+            .page-link:hover {
+                color: #218838;
+            }
+
+        .alert-info {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .selected-highlight {
+            background-color: #d4edda !important;
+            /* Or any color that fits your design */
+        }
+
+        #selectionActions {
+            margin-top: 10px;
+        }
+
+        #deselectAll {
+            float: left;
+            font-size: 1.0rem;
+            cursor: pointer;
+            border: none;
+            align-self: center;
+            margin-left: 10px;
+        }
+
+            #deselectAll:hover {
+                color: red;
+            }
+        #downloadSelected {
+            margin-left: 10px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            color: #007bff; /* Change this to fit your design */
+        }
+
+        #downloadSelected:hover {
+            color: #0056b3; /* Darken the color on hover */
+        }
+
+        #deleteSelected {
+            margin-left: 10px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            color: #007bff; /* Change this to fit your design */
+        }
+        #deleteSelected:hover {
+            color: #0056b3; /* Darken the color on hover */
+        }
+    </style>
 }
