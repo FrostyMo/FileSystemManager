@@ -2,9 +2,6 @@
 using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Data.Entity;
-using System.IO;
-using System.IO.Compression;
-using System.Linq;
 
 namespace FileSystemManager.Controllers
 {
@@ -14,7 +11,6 @@ namespace FileSystemManager.Controllers
         private readonly string _recycleBinPath;
         private readonly IConfiguration configuration;
         private readonly ApplicationDbContext _context;
-
         public FileSystemController(IConfiguration configuration, ApplicationDbContext context)
         {
             this.configuration = configuration;
@@ -22,8 +18,6 @@ namespace FileSystemManager.Controllers
             rootPath = configuration["PhotoDirectory"] ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
             _recycleBinPath = configuration["RecycleBinDirectory"] ?? Path.Combine(Directory.GetCurrentDirectory(), "RecycleBin");
         }
-
-
         public IActionResult Index(string path = "", int page = 1, int pageSize = 10, string searchQuery = "")
         {
             var sanitizedPath = string.IsNullOrEmpty(path) ? "" : path.TrimStart('/');
@@ -83,14 +77,12 @@ namespace FileSystemManager.Controllers
 
             return View();
         }
-
         [HttpGet]
         public IActionResult CreateDirectory(string path = "")
         {
             ViewBag.CurrentPath = path;
             return View();
         }
-
         [HttpPost]
         public IActionResult CreateDirectory(string directoryName, string path)
         {
@@ -106,14 +98,12 @@ namespace FileSystemManager.Controllers
             Directory.CreateDirectory(newPath);
             return RedirectToAction("Index", new { path });
         }
-
         [HttpGet]
         public IActionResult UploadFile(string path = "")
         {
             ViewBag.CurrentPath = path;
             return View();
         }
-
         [HttpPost]
         public async Task<IActionResult> UploadFile(IFormFile file, string path, string issuedBy, DateTime? expiryDate)
         {
@@ -194,8 +184,6 @@ namespace FileSystemManager.Controllers
 
             return RedirectToAction("Index", new { path });
         }
-
-
         [HttpPost]
         public IActionResult ReplaceFile(IFormFile file, string path)
         {
@@ -216,7 +204,6 @@ namespace FileSystemManager.Controllers
 
             return RedirectToAction("Index", new { path });
         }
-
         private string GetUniqueDirectoryName(string path)
         {
             int count = 1;
@@ -228,7 +215,6 @@ namespace FileSystemManager.Controllers
             }
             return new DirectoryInfo(uniquePath).Name;
         }
-
         private string GetUniqueFileName(string path)
         {
             int count = 1;
@@ -244,7 +230,6 @@ namespace FileSystemManager.Controllers
             }
             return Path.GetFileName(uniquePath);
         }
-
         public IActionResult OpenFile(string path)
         {
             if (string.IsNullOrEmpty(path))
@@ -290,7 +275,28 @@ namespace FileSystemManager.Controllers
 
             return File(fileBytes, mimeType, Path.GetFileName(filePath));
         }
-
+        public async Task<IActionResult> PermanentlyDeleteItem(int id)
+        {
+            try
+            {
+                var fileMetadata = await _context.FileMetadata.FindAsync(id);
+                if (fileMetadata == null || !fileMetadata.IsDeleted)
+                {
+                    return NotFound();
+                }
+                if (System.IO.File.Exists(fileMetadata.DeletedPath))
+                {
+                    System.IO.File.Delete(fileMetadata.DeletedPath);
+                }
+                _context.FileMetadata.Remove(fileMetadata);
+                await _context.SaveChangesAsync();
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, "Error deleting item: " + ex.Message);
+            }
+        }
         [HttpDelete]
         public async Task<IActionResult> DeleteItem(string path)
         {
@@ -298,17 +304,24 @@ namespace FileSystemManager.Controllers
             {
                 return BadRequest("Invalid path");
             }
+
             using (var transaction = await _context.Database.BeginTransactionAsync())
             {
+                string fullPath = null;
+                string recycleBinPath = null;
+                bool isDirectory = false;
+
                 try
                 {
                     var decodedPath = WebUtility.UrlDecode(path).Replace('\\', '/');
-                    var fullPath = Path.Combine(rootPath, decodedPath).Replace('\\', '/');
-                    var recycleBinPath = Path.Combine(_recycleBinPath, Path.GetFileName(fullPath)).Replace('/', '\\');
+                    fullPath = Path.Combine(rootPath, decodedPath).Replace('\\', '/');
+                    recycleBinPath = Path.Combine(_recycleBinPath, Path.GetFileName(fullPath)).Replace('/', '\\');
                     Directory.CreateDirectory(Path.GetDirectoryName(recycleBinPath));
+
                     if (Directory.Exists(fullPath))
                     {
                         Directory.Move(fullPath, recycleBinPath);
+                        isDirectory = true;
                     }
                     else if (System.IO.File.Exists(fullPath))
                     {
@@ -322,11 +335,11 @@ namespace FileSystemManager.Controllers
                     {
                         return NotFound();
                     }
-                    // Normalize the path for consistent database querying
+
                     var normalizedPath = decodedPath;
-                    var allFileMetadata = _context.FileMetadata.AsEnumerable();
-                    var fileMetadata = allFileMetadata
+                    var fileMetadata = _context.FileMetadata.AsEnumerable()
                         .FirstOrDefault(fm => fm.FilePath.Replace('\\', '/') == normalizedPath);
+
                     if (fileMetadata != null)
                     {
                         fileMetadata.IsDeleted = true;
@@ -335,16 +348,29 @@ namespace FileSystemManager.Controllers
                         _context.Update(fileMetadata);
                         await _context.SaveChangesAsync();
                     }
+
                     await transaction.CommitAsync();
                     return Ok();
                 }
                 catch (Exception ex)
                 {
                     await transaction.RollbackAsync();
+
+                    // Roll back local file system changes
+                    if (isDirectory && Directory.Exists(recycleBinPath))
+                    {
+                        Directory.Move(recycleBinPath, fullPath);
+                    }
+                    else if (System.IO.File.Exists(recycleBinPath))
+                    {
+                        System.IO.File.Move(recycleBinPath, fullPath);
+                    }
+
                     return StatusCode(500, "Error deleting item: " + ex.Message);
                 }
             }
         }
+
         [HttpGet("RecycleBin")]
         public IActionResult RecycleBin()
         {
@@ -366,28 +392,24 @@ namespace FileSystemManager.Controllers
                 return StatusCode(500, "Error retrieving recycle bin items: " + ex.Message);
             }
         }
-
-        
         [HttpPut("FileSystem/RestoreItem/{fileId}")]
-        public IActionResult RestoreItem(int fileId)
+        public async Task<IActionResult> RestoreItem(int fileId)
         {
             try
             {
-                var fileMetadata = _context.FileMetadata.Find(fileId);
+                var fileMetadata = await _context.FileMetadata.FindAsync(fileId);
                 if (fileMetadata == null)
                 {
                     return NotFound("File not found in recycle bin.");
                 }
-
-                string deletedPath = fileMetadata.DeletedPath; // Path where the file was originally deleted from
-                string restorePath = DetermineRestorePath(fileMetadata.FilePath); // Determine where to restore the file
-
+                string deletedPath = fileMetadata.DeletedPath;
+                string restorePath = DetermineRestorePath(fileMetadata.FilePath);
                 if (System.IO.File.Exists(deletedPath))
                 {
                     System.IO.File.Move(deletedPath, restorePath);
                     fileMetadata.IsDeleted = false;
-                    fileMetadata.DeletedPath = null; // Clear the deleted path since it's restored
-                    _context.SaveChanges();
+                    fileMetadata.DeletedPath = null;
+                    await _context.SaveChangesAsync();
 
                     return Ok(new { message = "File restored successfully." });
                 }
@@ -401,77 +423,10 @@ namespace FileSystemManager.Controllers
                 return StatusCode(500, "Error restoring file: " + ex.Message);
             }
         }
-
-
         private string DetermineRestorePath(string uploadedFilePath)
         {
-            // Example: Restore to the original uploaded path
             return uploadedFilePath;
         }
-
-
-
-        //[HttpPost]
-        //public IActionResult RenameItem(string path, string newName)
-        //{
-        //    if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(newName))
-        //    {
-        //        return BadRequest("Invalid path or new name");
-        //    }
-
-        //    // Decode and normalize the path
-        //    var decodedPath = System.Net.WebUtility.UrlDecode(path).TrimStart('/').Replace('\\', '/');
-        //    var fullPath = Path.Combine(rootPath, decodedPath).Replace('\\', '/');
-
-        //    // Extract the file extension from the original path
-        //    var extension = Path.GetExtension(fullPath);
-
-        //    // Ensure the new name contains the same extension
-        //    if (!newName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
-        //    {
-        //        newName = Path.ChangeExtension(newName, extension);
-        //    }
-
-        //    var newFullPath = Path.Combine(Path.GetDirectoryName(fullPath), newName).Replace('\\', '/');
-
-        //    try
-        //    {
-        //        if (Directory.Exists(fullPath))
-        //        {
-        //            Directory.Move(fullPath, newFullPath);
-        //        }
-        //        else if (System.IO.File.Exists(fullPath))
-        //        {
-        //            System.IO.File.Move(fullPath, newFullPath);
-        //        }
-        //        else
-        //        {
-        //            return NotFound();
-        //        }
-        //        // Normalize the path for database search
-        //        var normalizedPath = decodedPath.Replace('\\', '/');
-        //        // Fetch all records and filter in memory
-        //        var fileMetadataList = _context.FileMetadata.ToList();
-        //        var fileMetadata = fileMetadataList.SingleOrDefault(fm => fm.FilePath.Replace('\\', '/') == normalizedPath);
-        //        if (fileMetadata == null)
-        //        {
-        //            return NotFound("File metadata not found in the database");
-        //        }
-        //        // Update file metadata with new name and path
-        //        var newFilePath = Path.Combine(Path.GetDirectoryName(normalizedPath), newName).Replace('\\', '/');
-        //        fileMetadata.FileName = newName;
-        //        fileMetadata.FilePath = newFilePath;
-        //        fileMetadata.DateModified = DateTime.Now;
-        //        _context.FileMetadata.Update(fileMetadata);
-        //        _context.SaveChanges();
-
-        //        return Ok();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return StatusCode(500, "Error renaming item: " + ex.Message);
-        //    }
-        //}
         [HttpPost]
         public IActionResult RenameItem(string path, string newName)
         {
@@ -479,45 +434,67 @@ namespace FileSystemManager.Controllers
             {
                 return BadRequest("Invalid path or new name");
             }
+
             var decodedPath = System.Net.WebUtility.UrlDecode(path).TrimStart('/').Replace('\\', '/');
             var fullPath = Path.Combine(rootPath, decodedPath).Replace('\\', '/');
             var extension = Path.GetExtension(fullPath);
+
             if (!newName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
             {
                 newName = Path.ChangeExtension(newName, extension);
             }
+
             var newFullPath = Path.Combine(Path.GetDirectoryName(fullPath), newName).Replace('\\', '/');
+
             using (var transaction = _context.Database.BeginTransaction())
             {
                 try
                 {
+                    bool itemExistsLocally = false;
+
                     if (Directory.Exists(fullPath))
                     {
                         Directory.Move(fullPath, newFullPath);
+                        itemExistsLocally = true;
                     }
                     else if (System.IO.File.Exists(fullPath))
                     {
                         System.IO.File.Move(fullPath, newFullPath);
+                        itemExistsLocally = true;
                     }
-                    else
-                    {
-                        return NotFound();
-                    }
+
                     var normalizedPath = decodedPath.Replace('\\', '/');
                     var fileMetadataList = _context.FileMetadata.ToList();
                     var fileMetadata = fileMetadataList.FirstOrDefault(fm => fm.FilePath.Replace('\\', '/') == normalizedPath);
+
                     if (fileMetadata == null)
                     {
                         return NotFound("File metadata not found in the database");
                     }
-                    // Update file metadata with new name and path
-                    var newFilePath = Path.Combine(Path.GetDirectoryName(normalizedPath), newName).Replace('\\', '/');
-                    fileMetadata.FileName = newName;
-                    fileMetadata.FilePath = newFilePath;
-                    fileMetadata.DateModified = DateTime.Now;
-                    _context.FileMetadata.Update(fileMetadata);
-                    _context.SaveChanges();
-                    transaction.Commit();
+
+                    if (itemExistsLocally)
+                    {
+                        // Update file metadata with new name and path
+                        var newFilePath = Path.Combine(Path.GetDirectoryName(normalizedPath), newName).Replace('\\', '/');
+                        fileMetadata.FileName = newName;
+                        fileMetadata.FilePath = newFilePath;
+                        fileMetadata.DateModified = DateTime.Now;
+                        _context.FileMetadata.Update(fileMetadata);
+                        _context.SaveChanges();
+                        transaction.Commit();
+                    }
+                    else
+                    {
+                        // Mark the item as not found or deleted in the database
+                        fileMetadata.IsDeleted = true;
+                        fileMetadata.DeletedPath = null;
+                        _context.FileMetadata.Update(fileMetadata);
+                        _context.SaveChanges();
+                        transaction.Commit();
+
+                        return NotFound("Item not found on the local file system. Metadata marked as deleted.");
+                    }
+
                     return Ok();
                 }
                 catch (Exception ex)
@@ -528,8 +505,7 @@ namespace FileSystemManager.Controllers
             }
         }
 
-
-        public async Task<IActionResult> GetItemInfo(string path, string type) 
+        public async Task<IActionResult> GetItemInfo(string path, string type)
         {
             if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(type))
             {
@@ -601,7 +577,6 @@ namespace FileSystemManager.Controllers
                 return StatusCode(500, "Error retrieving item info");
             }
         }
-
         private string GetDirectorySize(string path)
         {
             try
@@ -627,7 +602,6 @@ namespace FileSystemManager.Controllers
                 return "Error";
             }
         }
-
         private string FormatSize(long bytes)
         {
             if (bytes >= 1073741824)
@@ -639,7 +613,6 @@ namespace FileSystemManager.Controllers
             else
                 return bytes + " B";
         }
-
         private List<Breadcrumb> GenerateBreadcrumbs(string path)
         {
             var breadcrumbs = new List<Breadcrumb>();
@@ -654,99 +627,10 @@ namespace FileSystemManager.Controllers
 
             return breadcrumbs;
         }
-
-        // Other methods remain the same
-
         public class Breadcrumb
         {
             public string Name { get; set; }
             public string Path { get; set; }
-        }
-
-
-        [HttpPost]
-        public IActionResult DownloadSelected([FromBody] List<string> selectedFiles)
-        {
-            if (selectedFiles == null || selectedFiles.Count == 0)
-            {
-                return BadRequest("No files selected.");
-            }
-
-            using (var memoryStream = new MemoryStream())
-            {
-                using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, true))
-                {
-                    foreach (var relativePath in selectedFiles)
-                    {
-                        var fullPath = Path.Combine(rootPath, relativePath.TrimStart('/').Replace("/", Path.DirectorySeparatorChar.ToString()));
-
-                        if (System.IO.File.Exists(fullPath))
-                        {
-                            var entryName = Path.GetFileName(fullPath);
-                            archive.CreateEntryFromFile(fullPath, entryName);
-                        }
-                        else if (Directory.Exists(fullPath))
-                        {
-                            // Add directory and its contents to the zip file
-                            AddDirectoryToZip(archive, fullPath, Path.GetFileName(fullPath));
-                        }
-                    }
-                }
-
-                memoryStream.Seek(0, SeekOrigin.Begin);
-                return File(memoryStream.ToArray(), "application/zip", "selected_files.zip");
-            }
-        }
-
-        // Helper method to add a directory and its contents to a zip file
-        private void AddDirectoryToZip(ZipArchive archive, string sourceDir, string entryName)
-        {
-            var files = Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories);
-            foreach (var file in files)
-            {
-                var relativePath = file.Substring(sourceDir.Length + 1);
-                archive.CreateEntryFromFile(file, Path.Combine(entryName, relativePath).Replace("\\", "/"));
-            }
-
-            var directories = Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories);
-            foreach (var directory in directories)
-            {
-                var relativePath = directory.Substring(sourceDir.Length + 1) + "/";
-                archive.CreateEntry(Path.Combine(entryName, relativePath).Replace("\\", "/"));
-            }
-
-            // Handle the case for empty directories
-            if (files.Length == 0 && directories.Length == 0)
-            {
-                archive.CreateEntry(Path.Combine(entryName, "empty_directory.txt").Replace("\\", "/"));
-            }
-        }
-
-        [HttpPost]
-        public IActionResult DeleteSelected([FromBody] List<string> paths)
-        {
-            try
-            {
-                foreach (var path in paths)
-                {
-                    var decodedPath = System.Net.WebUtility.UrlDecode(path);
-                    var fullPath = Path.Combine(rootPath, decodedPath.TrimStart('/'));
-
-                    if (Directory.Exists(fullPath))
-                    {
-                        Directory.Delete(fullPath, true);
-                    }
-                    else if (System.IO.File.Exists(fullPath))
-                    {
-                        System.IO.File.Delete(fullPath);
-                    }
-                }
-                return Ok();
-            }
-            catch
-            {
-                return StatusCode(500, "Error deleting items");
-            }
         }
     }
 }

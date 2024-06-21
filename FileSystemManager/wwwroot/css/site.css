@@ -1,16 +1,22 @@
 ﻿/* Font Awesome CDN for Icons */
 @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css');
 
+.btn-primary[b-pchit8ekh0] {
+    color: #fff !important;
+    background-color: #218838 !important;
+}
+
 body {
     background-color: #f8f9fa;
     color: #343a40;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    position:relative;
+    position: relative;
     padding-bottom: 5rem;
     /*    padding-bottom: 2rem;*/
 }
+
 footer {
     background-color: #2b2b2b;
     position: absolute;
