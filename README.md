@@ -50,7 +50,7 @@ File System Manager is a web-based application designed to manage files and dire
     ```
 
 4. **Access the Application**
-    - Open your web browser and navigate to `http://localhost:5000`.
+    - Open your web browser and navigate to `http://localhost:PORT_ASSIGNED`.
 
 ## Usage
 
@@ -79,11 +79,11 @@ Contributions are welcome! Please fork the repository and submit a pull request 
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Contact
 
-For any questions or feedback, please reach out to [your email address].
+For any questions or feedback, please reach out to mominsalar3@gmail.com.
 
 ---
 
