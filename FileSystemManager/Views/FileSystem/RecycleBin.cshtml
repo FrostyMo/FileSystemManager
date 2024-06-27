@@ -71,7 +71,6 @@
     </div>
     <div class="card-body">
         <ul id="recycleBinList" class="list-group mt-2">
-            <!-- Recycle bin items will be dynamically added here -->
         </ul>
     </div>
 </div>
@@ -80,33 +79,50 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         $(document).ready(function () {
+            debugger
             function fetchRecycleBinItems() {
                 $.getJSON('@Url.Action("GetRecycleBinItems", "FileSystem")')
                     .done(function (data) {
                         const recycleBinList = $('#recycleBinList');
                         recycleBinList.empty();
+                        debugger
+                        if (data.length === 0) {
+                            recycleBinList.append('<li class="list-group-item">No items in recycle bin</li>');
+                            return;
+                        }
 
                         $.each(data, function (index, item) {
+                            debugger;
+                            const itemPath = item.path ? item.path.replace(/\\/g, '/') : '';
+                            const itemName = itemPath.split('/').pop();
                             const li = $('<li>').addClass('list-group-item');
+
+                            // Determine the icon and type based on whether the item is a folder or a file
+                            const itemIcon = item.isFolder ? '<i class="fas fa-folder"></i>' : '<i class="fas fa-file"></i>';
+                            const itemType = item.isFolder; 
+
                             li.html(`
-                                                <div class="name-column text-truncate">
-                                                    <i class="fas fa-trash"></i> <!-- Font Awesome icon for deleted items -->
-                                                    ${item.fileName}
-                                                </div>
-                                                <div class="date-modified-column">
-                                                    <span>${new Date(item.dateModified).toLocaleString()}</span>
-                                                </div>
-                                                <div class="actions-column">
-                                                    <button class="btn btn-sm btn-primary restore-btn" data-file-id="${item.id}">Restore</button>
-                                                    <button class="btn btn-sm btn-danger delete-btn" data-file-id="${item.id}">Permanently Delete</button>
-                                                </div>
-                                            `);
+                        <div class="name-column text-truncate">
+                            ${itemIcon} <!-- Font Awesome icon for folder or file -->
+                            ${itemName}
+                        </div>
+                        <div class="date-modified-column">
+                            <span>${new Date(item.dateModified).toLocaleString()}</span>
+                        </div>
+                        <div class="actions-column">
+                            <button class="btn btn-sm btn-primary restore-btn" data-file-id="${item.id}">Restore</button>
+                            <button class="btn btn-sm btn-danger delete-btn" data-file-id="${item.id}">Permanently Delete</button>
+                        </div>
+                    
+                    `);
+
                             recycleBinList.append(li);
 
                             // Add click event listener to restore button
                             li.find('.restore-btn').click(function () {
+                                debugger
                                 const fileId = $(this).data('file-id');
-                                if (confirm(`Are you sure you want to restore ${item.fileName}?`)) {
+                                if (confirm(`Are you sure you want to restore ${itemName}?`)) {
                                     $.ajax({
                                         url: `@Url.Action("RestoreItem", "FileSystem")/${fileId}`,
                                         method: 'PUT',
@@ -124,7 +140,7 @@
                             // Add click event listener to delete button
                             li.find('.delete-btn').click(function () {
                                 const fileId = $(this).data('file-id');
-                                if (confirm(`Are you sure you want to permanently delete ${item.fileName}?`)) {
+                                if (confirm(`Are you sure you want to permanently delete ${itemName}?`)) {
                                     $.ajax({
                                         url: `@Url.Action("PermanentlyDeleteItem", "FileSystem")/${fileId}`,
                                         method: 'DELETE',

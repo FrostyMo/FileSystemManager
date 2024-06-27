@@ -23,4 +23,5 @@ public class FileMetadata
     public string Owner { get; set; }
     public bool IsDeleted { get; set; }
     public string? DeletedPath { get; set; }
+    public bool IsFolder { get; set; }
 }
