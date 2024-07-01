@@ -21,4 +21,7 @@ public class FileMetadata
     public DateTime? ExpiryDate { get; set; }
     public string IssuedBy { get; set; }
     public string Owner { get; set; }
+    public bool IsDeleted { get; set; }
+    public string? DeletedPath { get; set; }
+    public bool IsFolder { get; set; }
 }

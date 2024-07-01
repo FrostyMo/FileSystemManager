@@ -10,7 +10,6 @@
     <None Remove="Views\FileSystem\" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Views\FileSystem\" />
     <Folder Include="wwwroot\uploads\" />
   </ItemGroup>
   <ItemGroup>
@@ -22,5 +21,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="System.Data.SQLite" Version="1.0.118" />
   </ItemGroup>
 </Project>
