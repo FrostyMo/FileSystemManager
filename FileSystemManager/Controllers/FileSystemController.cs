@@ -265,7 +265,82 @@ namespace FileSystemManager.Controllers
             return RedirectToAction("Index", new { path });
         }
 
-        
+        [HttpPost]
+        public async Task<IActionResult> ResolveConflict(List<IFormFile> files, string path, string action)
+        {
+            if (files != null && files.Count > 0)
+            {
+                var sanitizedPath = string.IsNullOrEmpty(path) ? "" : path.TrimStart('/');
+                var currentPath = Path.Combine(rootPath, sanitizedPath);
+
+                for (int i = 0; i < files.Count; i++)
+                {
+                    var file = files[i];
+                    var filePath = Path.Combine(currentPath, file.FileName);
+
+                    if (action != "replace" && System.IO.File.Exists(filePath))
+                    {
+                        return Conflict(new
+                        {
+                            fileName = file.FileName,
+                            suggestedName = GetUniqueFileName(filePath),
+                            index = i
+                        });
+                    }
+
+                    if (action == "replace" && System.IO.File.Exists(filePath))
+                    {
+                        System.IO.File.Delete(filePath);
+                    }
+
+                    var issuedByKey = $"issuedBy_{i}";
+                    var expiryDateKey = $"expiryDate_{i}";
+
+                    var issuedBy = Request.Form[issuedByKey];
+                    var expiryDate = DateTime.TryParse(Request.Form[expiryDateKey], out DateTime expiry) ? (DateTime?)expiry : null;
+
+                    using (var transaction = await _context.Database.BeginTransactionAsync())
+                    {
+                        try
+                        {
+                            using (var stream = new FileStream(filePath, FileMode.Create))
+                            {
+                                await file.CopyToAsync(stream);
+                            }
+
+                            // Save metadata to database
+                            var fileMetadata = new FileMetadata
+                            {
+                                FileName = file.FileName,
+                                FilePath = filePath,
+                                FileSize = file.Length,
+                                DateModified = DateTime.Now,
+                                ModifiedBy = "Momin", // Hardcoded for now
+                                Owner = "Momin", // Hardcoded for now
+                                ExpiryDate = expiryDate,
+                                IssuedBy = issuedBy
+                            };
+
+                            _context.FileMetadata.Add(fileMetadata);
+                            await _context.SaveChangesAsync();
+
+                            await transaction.CommitAsync();
+                        }
+                        catch
+                        {
+                            await transaction.RollbackAsync();
+                            if (System.IO.File.Exists(filePath))
+                            {
+                                System.IO.File.Delete(filePath); // Clean up the file if transaction fails
+                            }
+                            return StatusCode(500, "An error occurred while uploading the file.");
+                        }
+                    }
+                }
+            }
+
+            return RedirectToAction("Index", new { path });
+        }
 
         [HttpPost]
         public IActionResult ReplaceFile(IFormFile file, string path)
