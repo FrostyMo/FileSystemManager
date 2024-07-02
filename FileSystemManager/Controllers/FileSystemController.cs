@@ -4,6 +4,7 @@ using System;
 using System.Collections.Immutable;
 using System.Net;
 using System.IO;
+using System.IO.Compression;
 
 namespace FileSystemManager.Controllers
 {
@@ -354,13 +355,12 @@ namespace FileSystemManager.Controllers
         public async Task<IActionResult> DeleteItem(string path)
         {
             if (string.IsNullOrEmpty(path))
-            {
+            {   
                 return BadRequest("Invalid path");
             }
 
             string recycleBinPath = null;
             string fullPath = null;
-
             using (var transaction = await _context.Database.BeginTransactionAsync())
             {
                 try
@@ -516,6 +516,88 @@ namespace FileSystemManager.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, "Error retrieving recycle bin items: " + ex.Message);
+            }
+        }
+
+
+        public IActionResult DownloadSelected([FromBody] List<string> selectedFiles)
+        {
+            if (selectedFiles == null || selectedFiles.Count == 0)
+            {
+                return BadRequest("No files selected.");
+            }
+
+            using (var memoryStream = new MemoryStream())
+            {
+                using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, true))
+                {
+                    foreach (var relativePath in selectedFiles)
+                    {
+                        var fullPath = Path.Combine(rootPath, relativePath.TrimStart('/').Replace("/", Path.DirectorySeparatorChar.ToString()));
+
+                        if (System.IO.File.Exists(fullPath))
+                        {
+                            var entryName = Path.GetFileName(fullPath);
+                            archive.CreateEntryFromFile(fullPath, entryName);
+                        }
+                        else if (Directory.Exists(fullPath))
+                        {
+                            // Add directory and its contents to the zip file
+                            AddDirectoryToZip(archive, fullPath, Path.GetFileName(fullPath));
+                        }
+                    }
+                }
+
+                memoryStream.Seek(0, SeekOrigin.Begin);
+                return File(memoryStream.ToArray(), "application/zip", "selected_files.zip");
+            }
+        }
+        private void AddDirectoryToZip(ZipArchive archive, string sourceDir, string entryName)
+        {
+            var files = Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories);
+            foreach (var file in files)
+            {
+                var relativePath = file.Substring(sourceDir.Length + 1);
+                archive.CreateEntryFromFile(file, Path.Combine(entryName, relativePath).Replace("\\", "/"));
+            }
+
+            var directories = Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories);
+            foreach (var directory in directories)
+            {
+                var relativePath = directory.Substring(sourceDir.Length + 1) + "/";
+                archive.CreateEntry(Path.Combine(entryName, relativePath).Replace("\\", "/"));
+            }
+
+            // Handle the case for empty directories
+            if (files.Length == 0 && directories.Length == 0)
+            {
+                archive.CreateEntry(Path.Combine(entryName, "empty_directory.txt").Replace("\\", "/"));
+            }
+        }
+        [HttpPost]
+        public IActionResult DeleteSelected([FromBody] List<string> paths)
+        {
+            try
+            {
+                foreach (var path in paths)
+                {
+                    var decodedPath = System.Net.WebUtility.UrlDecode(path);
+                    var fullPath = Path.Combine(rootPath, decodedPath.TrimStart('/'));
+
+                    if (Directory.Exists(fullPath))
+                    {
+                        Directory.Delete(fullPath, true);
+                    }
+                    else if (System.IO.File.Exists(fullPath))
+                    {
+                        System.IO.File.Delete(fullPath);
+                    }
+                }
+                return Ok();
+            }
+            catch
+            {
+                return StatusCode(500, "Error deleting items");
             }
         }
         private string DetermineRestorePath(string uploadedFilePath)
