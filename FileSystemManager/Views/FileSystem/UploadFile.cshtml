@@ -1,25 +1,17 @@
 ﻿@{
-    ViewData["Title"] = "Upload File";
+    ViewData["Title"] = "Upload Files";
     var currentPath = ViewBag.CurrentPath?.ToString() ?? "";
 }
 
-<h1>Upload File</h1>
+<h1>Upload Files</h1>
 
-<form id="uploadForm" asp-action="UploadFile" method="post" enctype="multipart/form-data">
+<form id="uploadForm" asp-action="UploadFiles" method="post" enctype="multipart/form-data">
     <div class="form-group">
-        <label for="file">File</label>
-        <input type="file" class="form-control" id="file" name="file" required>
+        <label for="files">Files</label>
+        <input type="file" class="form-control" name="files" multiple required>
     </div>
-    <div class="form-group">
-        <label for="issuedBy">Issued By</label>
-        <input type="text" class="form-control" id="issuedBy" name="issuedBy">
-    </div>
-    <div class="form-group">
-        <label for="expiryDate">Expiry Date</label>
-        <input type="date" class="form-control" id="expiryDate" name="expiryDate">
-    </div>
-    <input type="hidden" name="path" value="@currentPath" />
-    <button type="submit" class="btn btn-primary">Upload</button>
+    <div id="fileDetailsContainer"></div>
+    <button type="submit" class="btn btn-primary mt-2">Upload</button>
 </form>
 
 <!-- Conflict Modal -->
@@ -48,57 +40,132 @@
 
 @section Scripts {
     <script>
-        document.getElementById('uploadForm').addEventListener('submit', function(event) {
-            event.preventDefault();
-            var formData = new FormData(this);
+        document.addEventListener('DOMContentLoaded', function () {
+            const fileInput = document.querySelector('input[name="files"]');
+            const fileDetailsContainer = document.getElementById('fileDetailsContainer');
+            const conflictModal = new bootstrap.Modal(document.getElementById('conflictModal'));
+            let currentConflictIndex = 0;
+            let formData;
+            let filesList = [];
+            let issuedByList = [];
+            let expiryDateList = [];
 
-            fetch('@Url.Action("UploadFile", "FileSystem")', {
-                method: 'POST',
-                body: formData
-            }).then(response => {
-                if (response.status === 409) {
-                    return response.json().then(data => {
-                        document.getElementById('conflictMessage').textContent = 'A file with this name already exists. Do you want to replace it or rename the new file?';
-                        document.getElementById('suggestedName').value = data.suggestedName;
-                        $('#conflictModal').modal('show');
-                    });
-                } else if (response.ok) {
-                    window.location.href = '@Url.Action("Index", "FileSystem")?path=@currentPath';
-                } else {
-                    alert('Error uploading file');
-                }
+            fileInput.addEventListener('change', function () {
+                fileDetailsContainer.innerHTML = '';
+                filesList = Array.from(fileInput.files);
+                filesList.forEach((file, index) => {
+                    const fileDetailsGroup = document.createElement('div');
+                    fileDetailsGroup.classList.add('file-details-group');
+                    fileDetailsGroup.innerHTML = `
+                        <h5>${file.name}</h5>
+                        <div class="form-group">
+                            <label for="issuedBy-${index}">Issued By</label>
+                            <input type="text" class="form-control" name="issuedBy" data-file-index="${index}" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="expiryDate-${index}">Expiry Date</label>
+                            <input type="date" class="form-control" name="expiryDate" data-file-index="${index}" required>
+                        </div>
+                    `;
+                    fileDetailsContainer.appendChild(fileDetailsGroup);
+                });
             });
-        });
 
-        document.getElementById('replaceButton').addEventListener('click', function() {
-            var formData = new FormData(document.getElementById('uploadForm'));
+            document.getElementById('uploadForm').addEventListener('submit', function (event) {
+                event.preventDefault();
+                prepareFormData();
 
-            fetch('@Url.Action("ReplaceFile", "FileSystem")', {
-                method: 'POST',
-                body: formData
-            }).then(response => {
-                if (response.ok) {
-                    window.location.href = '@Url.Action("Index", "FileSystem")?path=@currentPath';
-                } else {
-                    alert('Error replacing file');
-                }
+                uploadFiles(formData);
             });
-        });
 
-        document.getElementById('renameButton').addEventListener('click', function() {
-            var formData = new FormData(document.getElementById('uploadForm'));
-            formData.set('file', new File([formData.get('file')], document.getElementById('suggestedName').value, { type: formData.get('file').type }));
+            function prepareFormData() {
+                formData = new FormData();
+                filesList.forEach((file, index) => {
+                    formData.append('files', file);
 
-            fetch('@Url.Action("UploadFile", "FileSystem")', {
-                method: 'POST',
-                body: formData
-            }).then(response => {
-                if (response.ok) {
-                    window.location.href = '@Url.Action("Index", "FileSystem")?path=@currentPath';
-                } else {
-                    alert('Error renaming and uploading file');
+                    const issuedByInput = document.querySelector(`input[name="issuedBy"][data-file-index="${index}"]`);
+                    const expiryDateInput = document.querySelector(`input[name="expiryDate"][data-file-index="${index}"]`);
+
+                    issuedByList[index] = issuedByInput.value;
+                    expiryDateList[index] = expiryDateInput.value;
+
+                    formData.append(`issuedBy_${index}`, issuedByInput.value);
+                    formData.append(`expiryDate_${index}`, expiryDateInput.value);
+                });
+            }
+
+            function uploadFiles(formData) {
+                fetch('@Url.Action("UploadFiles", "FileSystem")', {
+                    method: 'POST',
+                    body: formData
+                }).then(response => {
+                    if (response.status === 409) {
+                        return response.json().then(data => {
+                            currentConflictIndex = data.index;
+                            showConflictModal(data);
+                        });
+                    } else if (response.ok) {
+                        window.location.href = '@Url.Action("Index", "FileSystem")?path=@currentPath';
+                    } else {
+                        alert('Error uploading files');
+                    }
+                });
+            }
+
+            function showConflictModal(data) {
+                document.getElementById('conflictMessage').textContent = `A file with the name ${data.fileName} already exists. Do you want to replace it or rename the new file?`;
+                document.getElementById('suggestedName').value = data.suggestedName;
+                conflictModal.show();
+            }
+
+            function handleFileConflict(action) {
+                let fileToResolve = filesList[currentConflictIndex];
+                if (action === 'rename') {
+                    const newName = document.getElementById('suggestedName').value;
+                    fileToResolve = new File([fileToResolve], newName, { type: fileToResolve.type });
                 }
-            });
+
+                const formDataForConflict = new FormData();
+                formDataForConflict.append('files', fileToResolve);
+                formDataForConflict.append('action', action);
+
+                formDataForConflict.append(`issuedBy_${currentConflictIndex}`, issuedByList[currentConflictIndex]);
+                formDataForConflict.append(`expiryDate_${currentConflictIndex}`, expiryDateList[currentConflictIndex]);
+
+                fetch('@Url.Action("ResolveConflict", "FileSystem")', {
+                    method: 'POST',
+                    body: formDataForConflict
+                }).then(response => {
+                    if (response.status === 409) {
+                        return response.json().then(data => {
+                            currentConflictIndex = data.index;
+                            showConflictModal(data);
+                        });
+                    } else if (response.ok) {
+                        filesList.splice(currentConflictIndex, 1);
+                        issuedByList.splice(currentConflictIndex, 1);
+                        expiryDateList.splice(currentConflictIndex, 1);
+
+                        if (filesList.length > 0) {
+                            prepareFormData();
+                            uploadFiles(formData);
+                        } else {
+                            conflictModal.hide();
+                            window.location.href = '@Url.Action("Index", "FileSystem")?path=@currentPath';
+                        }
+                    } else {
+                        alert('Error handling file conflict');
+                    }
+                });
+            }
+
+            document.getElementById('replaceButton').onclick = function () {
+                handleFileConflict('replace');
+            };
+
+            document.getElementById('renameButton').onclick = function () {
+                handleFileConflict('rename');
+            };
         });
     </script>
 }
