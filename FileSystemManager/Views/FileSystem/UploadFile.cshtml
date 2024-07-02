@@ -2,9 +2,7 @@
     ViewData["Title"] = "Upload File";
     var currentPath = ViewBag.CurrentPath?.ToString() ?? "";
 }
-
 <h1>Upload File</h1>
-
 <form id="uploadForm" asp-action="UploadFile" method="post" enctype="multipart/form-data">
     <div class="form-group">
         <label for="file">File</label>
@@ -12,7 +10,7 @@
     </div>
     <div class="form-group">
         <label for="issuedBy">Issued By</label>
-        <input type="text" class="form-control" id="issuedBy" name="issuedBy">
+        <input type="text" class="form-control" id="issuedBy" name="issuedBy" required>
     </div>
     <div class="form-group">
         <label for="expiryDate">Expiry Date</label>
@@ -21,7 +19,6 @@
     <input type="hidden" name="path" value="@currentPath" />
     <button type="submit" class="btn btn-primary">Upload</button>
 </form>
-
 <!-- Conflict Modal -->
 <div class="modal fade" id="conflictModal" tabindex="-1" role="dialog" aria-labelledby="conflictModalLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
@@ -45,7 +42,6 @@
         </div>
     </div>
 </div>
-
 @section Scripts {
     <script>
         document.getElementById('uploadForm').addEventListener('submit', function(event) {
