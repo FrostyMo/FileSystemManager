@@ -11,6 +11,7 @@
         <input type="file" class="form-control" name="files" multiple required>
     </div>
     <div id="fileDetailsContainer"></div>
+    <input type="hidden" name="path" value="@currentPath" />
     <button type="submit" class="btn btn-primary mt-2">Upload</button>
 </form>
 <!-- Conflict Modal -->
@@ -47,6 +48,7 @@
             let filesList = [];
             let issuedByList = [];
             let expiryDateList = [];
+            const currentPath = '@currentPath';
 
             fileInput.addEventListener('change', function () {
                 fileDetailsContainer.innerHTML = '';
@@ -78,6 +80,8 @@
 
             function prepareFormData() {
                 formData = new FormData();
+                formData.append('path', currentPath); // Add the current path to the form data
+
                 filesList.forEach((file, index) => {
                     formData.append('files', file);
 
@@ -126,6 +130,7 @@
                 const formDataForConflict = new FormData();
                 formDataForConflict.append('files', fileToResolve);
                 formDataForConflict.append('action', action);
+                formDataForConflict.append('path', currentPath); // Ensure path is included
 
                 formDataForConflict.append(`issuedBy_${currentConflictIndex}`, issuedByList[currentConflictIndex]);
                 formDataForConflict.append(`expiryDate_${currentConflictIndex}`, expiryDateList[currentConflictIndex]);

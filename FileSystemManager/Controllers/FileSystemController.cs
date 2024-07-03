@@ -87,7 +87,7 @@ namespace FileSystemManager.Controllers
             return View();
         }
         [HttpPost]
-        public IActionResult CreateDirectory(string directoryName, string path)
+        public async Task<IActionResult> CreateDirectory(string directoryName, string path)
         {
             var sanitizedPath = string.IsNullOrEmpty(path) ? "" : path.TrimStart('/');
             var currentPath = Path.Combine(rootPath, sanitizedPath);
@@ -99,6 +99,40 @@ namespace FileSystemManager.Controllers
             }
 
             Directory.CreateDirectory(newPath);
+
+            using (var transaction = await _context.Database.BeginTransactionAsync())
+            {
+                try
+                {
+
+                    // Save metadata to database
+                    var fileMetadata = new FileMetadata
+                    {
+                        FileName = directoryName,
+                        FilePath = newPath,
+                        DateModified = DateTime.Now,
+                        ModifiedBy = "Momin", // Hardcoded for now
+                        Owner = "Momin", // Hardcoded for now
+                        IsFolder = true,
+                        IssuedBy = "N/A",
+                    };
+
+                    _context.FileMetadata.Add(fileMetadata);
+                    await _context.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+                }
+                catch (Exception exc)
+                {
+                    await transaction.RollbackAsync();
+                    if (Directory.Exists(newPath))
+                    {
+                        Directory.Delete(newPath, true); // Clean up the file if transaction fails
+                    }
+                    return StatusCode(500, "An error occurred while uploading the file." + exc.Message);
+                }
+            }
+
             return RedirectToAction("Index", new { path });
         }
         [HttpGet]
@@ -245,14 +279,14 @@ namespace FileSystemManager.Controllers
 
                             await transaction.CommitAsync();
                         }
-                        catch
+                        catch (Exception exc)
                         {
                             await transaction.RollbackAsync();
                             if (System.IO.File.Exists(filePath))
                             {
                                 System.IO.File.Delete(filePath); // Clean up the file if transaction fails
                             }
-                            return StatusCode(500, "An error occurred while uploading the file.");
+                            return StatusCode(500, "An error occurred while uploading the file." + exc.Message);
                         }
                     }
                 }
@@ -314,7 +348,8 @@ namespace FileSystemManager.Controllers
                                 ModifiedBy = "Momin", // Hardcoded for now
                                 Owner = "Momin", // Hardcoded for now
                                 ExpiryDate = expiryDate,
-                                IssuedBy = issuedBy
+                                IssuedBy = issuedBy,
+                                IsFolder = false
                             };
 
                             _context.FileMetadata.Add(fileMetadata);
@@ -517,8 +552,10 @@ namespace FileSystemManager.Controllers
                 try
                 {
                     var decodedPath = WebUtility.UrlDecode(path).Replace('\\', '/');
-                    fullPath = Path.Combine(rootPath, decodedPath).Replace('\\', '/');
-                    recycleBinPath = Path.Combine(_recycleBinPath, Path.GetFileName(fullPath)).Replace('/', '\\');
+                    //var sanitizedPath = string.IsNullOrEmpty(decodedPath) ? "" : decodedPath.TrimStart('/');
+                    fullPath = Path.Combine(rootPath, decodedPath.TrimStart('/').Replace("/", Path.DirectorySeparatorChar.ToString()));
+                    //fullPath = Path.GetFullPath(fullPath).Replace('\\', '/');
+                    recycleBinPath = Path.Combine(_recycleBinPath, Path.GetFileName(fullPath)).Replace('\\', '/');
                     Directory.CreateDirectory(Path.GetDirectoryName(recycleBinPath));
 
                     if (Directory.Exists(fullPath))
@@ -528,8 +565,8 @@ namespace FileSystemManager.Controllers
                             Directory.Delete(recycleBinPath, true);
                         }
                         Directory.Move(fullPath, recycleBinPath);
-                        var normalizedPath = decodedPath.Replace('\\', '/').TrimEnd('/');
-                        UpdateMetadataForDirectory(normalizedPath, recycleBinPath);
+                        //var normalizedPath = decodedPath.Replace('\\', '/').TrimEnd('/');
+                        UpdateMetadataForDirectory(fullPath, recycleBinPath);
                     }
                     else if (System.IO.File.Exists(fullPath))
                     {
@@ -538,10 +575,10 @@ namespace FileSystemManager.Controllers
                             System.IO.File.Delete(recycleBinPath);
                         }
                         System.IO.File.Move(fullPath, recycleBinPath);
-                        var normalizedPath = decodedPath.Replace('\\', '/').TrimEnd('/');
+                        //var normalizedPath = Path.Combine(rootPath, decodedPath.Replace('\\', '/').TrimEnd('/'));
                         var fileMetadata = _context.FileMetadata
                             .AsEnumerable()
-                            .FirstOrDefault(fm => fm.FilePath.Replace('\\', '/') == normalizedPath);
+                            .FirstOrDefault(fm => fm.FilePath.Replace('\\', '/') == fullPath);
 
                         if (fileMetadata != null)
                         {
